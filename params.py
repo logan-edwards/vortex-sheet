@@ -9,15 +9,17 @@ delta = 0.2
 
 T = 5
 dt = 0.01
-Nt = int(T/dt)
+Nt = int(T/dt) + 1
 
-theta = np.zeros((Nb, Nt))
-dthetadt = np.zeros((Nb, Nt))
+eps_shed = 1e-12
 
-L = np.zeros((Nb, Nt))
-dLdt = np.zeros((Nb, Nt))
+u = 1.0
 
-c_x = np.zeros((Nb, Nt))
-c_y = np.zeros((Nb, Nt))
-dcdt_x = np.zeros((Nb, Nt))
-dcdt_y = np.zeros((Nb, Nt))
+pitching_amplitude = np.pi/9.0
+pitching_phase = 0.0
+
+heaving_amplitude = 0.5
+heaving_phase = 0.0
+
+lengthening_amplitude = 1.5
+lengthening_phase = np.pi/4.0
