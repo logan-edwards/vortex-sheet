@@ -1,25 +1,31 @@
-import params
-import classes
-
 import numpy as np
 from numba import njit, prange
 
 import matplotlib.pyplot as plt
 import matplotlib.animation as animation
 
+'''
+    Vortex sheet method functions
+'''
+
 @njit
 def K_delta_normal(dx, dy, nx, ny, delta):
+    denominator = dx**2 + dy**2 + delta**2
+    if(denominator < 1e-12):
+        return(0)
     return(
         (0.5/np.pi) * (-dy * nx + dx * ny) / (dx**2 + dy**2 + delta**2)
     )
 
 @njit
-def K_normal(dx, dy, nx, ny, delta):
-    if(dx < 1e-13 and dy < 1e-13):
-        return(0)
-    return(
-        (0.5/np.pi) * (-dy * nx + dx * ny) / (dx**2 + dy**2)
-    )
+def K_delta(dx, dy, delta):
+    denominator = dx**2 + dy**2 + delta**2
+    if(denominator < 1e-12):
+        return 0.0, 0.0
+    u = (0.5/np.pi) * -dy / denominator
+    v = (0.5/np.pi) * dx / denominator
+
+    return u,v
 
 @njit(parallel=True)
 def compute_bound_sheet(nhat_x,
@@ -35,8 +41,11 @@ def compute_bound_sheet(nhat_x,
                         free_sheet_circulation,
                         delta
                         ):
-    Nb = np.size(body_x_cheb, axis=0)
-    Nf = np.size(free_sheet_circulation, axis=1)
+    Nb = np.size(body_x_cheb) - 1
+    Nf = np.size(free_sheet_circulation)
+
+    if(Nf - 1 < 0):
+        return(np.zeros(Nb+2))
 
     A = np.zeros((Nb+2, Nb+2))
     b = np.zeros(Nb+2)
@@ -64,14 +73,21 @@ def compute_bound_sheet(nhat_x,
                     delta
                     )
                 )
-        bsum = bsum + 0.5 * free_sheet_circulation[Nf - 1] * K_delta_normal(
+        bsum = bsum + 0.5 * free_sheet_circulation[Nf - 1] * (K_delta_normal(
             body_x_coll[l] - body_x_cheb[0], 
             body_y_coll[l] - body_y_cheb[0], 
             nhat_x, 
             nhat_y, 
             delta
+        ) + K_delta_normal(
+            body_x_coll[l] - free_sheet_x[Nf - 1],
+            body_y_coll[l] - free_sheet_y[Nf - 1],
+            nhat_x,
+            nhat_y,
+            delta
+            )
         )
-        bsum = bsum + nhat_x * body_dxdt_coll[l] + nhat_y * body_dydt_coll[l]
+        b[l] = bsum
 
     '''
     Construct the A matrix
@@ -86,20 +102,20 @@ def compute_bound_sheet(nhat_x,
     for l in prange(Nb):
         for k in range(Nb+1):
             if(k==0 or k==Nb):
-                A[l,k] = 0.5 * np.pi * K_normal(
+                A[l,k] = (np.pi/(2*Nb)) * K_delta_normal(
                     body_x_coll[l] - body_x_cheb[k], 
                     body_y_coll[l] - body_y_cheb[k], 
                     nhat_x, 
-                    nhat_y, 
-                    delta
+                    nhat_y,
+                    0
                     )
             else:
-                A[l,k] = np.pi * K_normal(
+                A[l,k] = (np.pi/Nb) * K_delta_normal(
                     body_x_coll[l] - body_x_cheb[k], 
                     body_y_coll[l] - body_y_cheb[k], 
                     nhat_x, 
-                    nhat_y, 
-                    delta
+                    nhat_y,
+                    0
                     )
         A[l,Nb+1] = 0.5 * (
             K_delta_normal(
@@ -125,10 +141,10 @@ def compute_bound_sheet(nhat_x,
     '''
         Enforce KCT:
     '''
-    A[Nb+1, 0] = np.pi/2
-    A[Nb+1, Nb] = np.pi/2
+    A[Nb+1, 0] = np.pi/(2*Nb)
+    A[Nb+1, Nb] = np.pi/(2*Nb)
     for k in range (1,Nb):
-        A[Nb+1, k] = np.pi
+        A[Nb+1, k] = np.pi/Nb
     A[Nb+1, Nb+1] = 1.0
 
     '''
@@ -142,25 +158,241 @@ def compute_bound_sheet(nhat_x,
     return(np.linalg.solve(A,b))
 
 @njit(parallel=True)
-def advance_free_sheet():
-    return(0)
+def compute_sheet_velocity(free_sheet_x,
+                           free_sheet_y,
+                           body_x_cheb,
+                           body_y_cheb,
+                           free_sheet_circulation,
+                           sigma,
+                           delta,
+                           ):
+    Nb = np.size(body_x_cheb)
+    Nf = np.size(free_sheet_circulation)
+
+    u_bound = np.zeros(Nf)
+    u_free = np.zeros(Nf)
+    v_bound = np.zeros(Nf)
+    v_free = np.zeros(Nf)
+
+    '''
+        Integrate over the free sheet
+    '''
+    for i in prange(Nf):
+        for j in range(Nf - 1):
+            u1,v1 = K_delta(free_sheet_x[i] - free_sheet_x[j+1],
+                            free_sheet_y[i] - free_sheet_y[j+1],
+                            delta)
+            u2,v2 = K_delta(free_sheet_x[i] - free_sheet_x[j],
+                            free_sheet_y[i] - free_sheet_y[j],
+                            delta)
+            u_free[i] = u_free[i] + 0.5 * (
+                free_sheet_circulation[j+1] - free_sheet_circulation[j]
+            ) * (u1 + u2)
+            v_free[i] = v_free[i] + 0.5 * (
+                free_sheet_circulation[j+1] - free_sheet_circulation[j]
+            ) * (v1 + v2)
+    
+    u_free = u_free
+    v_free = v_free
+
+    '''
+        Integrate over the bound sheet
+    '''
+    for i in prange(Nf):
+        for k in range(Nb):
+            u1,v1 = K_delta(free_sheet_x[i] - body_x_cheb[k],
+                            free_sheet_y[i] - body_y_cheb[k],
+                            0)
+            if(k==0 or k==Nb):
+                u_bound[i] = u_bound[i] + (np.pi / (2*Nb)) * sigma[k] * u1
+                v_bound[i] = v_bound[i] + (np.pi / (2*Nb)) * sigma[k] * v1
+            else:
+                u_bound[i] = u_bound[i] + (np.pi / Nb) * sigma[k] * u1
+                v_bound[i] = v_bound[i] + (np.pi / Nb) * sigma[k] * v1
+    u_bound = u_bound
+    v_bound = v_bound
+
+    return u_bound + u_free, v_bound + v_free
+
+@njit(parallel=True)
+def update_sheet_position(free_sheet_x,
+                          free_sheet_y,
+                          free_sheet_dxdt,
+                          free_sheet_dydt,
+                          free_sheet_dxdt_prev,
+                          free_sheet_dydt_prev,
+                          dt
+                          ):
+    Nf = np.size(free_sheet_x)
+    x_new = np.zeros(Nf)
+    y_new = np.zeros(Nf)
+
+    for i in prange(Nf-1):
+        x_new[i] = free_sheet_x[i] + 1.5 * dt * free_sheet_dxdt[i] - 0.5 * dt * free_sheet_dxdt_prev[i]
+        y_new[i] = free_sheet_y[i] + 1.5 * dt * free_sheet_dydt[i] - 0.5 * dt * free_sheet_dydt_prev[i]
+    x_new[Nf-1] = free_sheet_x[Nf-1] + dt * free_sheet_dxdt[Nf-1]
+    y_new[Nf-1] = free_sheet_y[Nf-1] + dt * free_sheet_dydt[Nf-1]
+    
+    return x_new, y_new
+
+@njit(parallel=True)
+def compute_pressure_distribution(tan_x,
+                                  tan_y,
+                                  body_x_coll,
+                                  body_y_coll,
+                                  body_x_cheb,
+                                  body_y_cheb,
+                                  body_dxdt_cheb,
+                                  body_dydt_cheb,
+                                  free_sheet_x,
+                                  free_sheet_y,
+                                  free_sheet_circulation,
+                                  sigma,
+                                  dsigmadt,
+                                  dgammadt
+                                  ):
+    Nb = np.size(body_x_coll)
+    Nf = np.size(free_sheet_x)
+
+    p = np.zeros(Nb + 1)
+    mu = np.zeros(Nb + 1)
+    tau = np.zeros(Nb + 1)
+    gamma = np.zeros(Nb + 1)
+    I_coll_x = np.zeros(Nb)
+    I_coll_y = np.zeros(Nb)
+    X_x = np.zeros(Nb + 1)
+    X_y = np.zeros(Nb + 1)
+    I_cheb_x = np.zeros(Nb + 1)
+    I_cheb_y = np.zeros(Nb + 1)
+    I_free_x = np.zeros(Nb + 1)
+    I_free_y = np.zeros(Nb + 1)
+    I_dsigmadt = np.zeros(Nb + 1)
+
+    '''
+        Reconstruct the integral at the chebyshev nodes using collocation data
+    '''
+
+    for l in prange(Nb):
+        for k in range(Nb + 1):
+            Ix,Iy = K_delta(body_x_coll[l] - body_x_cheb[k],
+                            body_y_coll[l] - body_y_cheb[k],
+                            0
+                            )
+            if(k == 0 or k == Nb):
+                I_coll_x[l] = I_coll_x[l] + (np.pi/(2*Nb)) * sigma[k] * Ix
+                I_coll_y[l] = I_coll_y[l] + (np.pi/(2*Nb)) * sigma[k] * Iy
+            else:
+                I_coll_x[l] = I_coll_x[l] + (np.pi/Nb) * sigma[k] * Ix
+                I_coll_y[l] = I_coll_y[l] + (np.pi/Nb) * sigma[k] * Iy
+    for j in prange(Nb):
+        for l in range(Nb):
+            X_x[j] = X_x[j] + 2 * I_coll_x[l] * np.cos(j*np.pi*(2*l+1)/(2*Nb))
+            X_y[j] = X_y[j] + 2 * I_coll_y[l] * np.cos(j*np.pi*(2*l+1)/(2*Nb))
+    for k in range(Nb + 1):
+        I_cheb_x[k] = I_cheb_x[k] + X_x[0] / (2*Nb)
+        I_cheb_y[k] = I_cheb_y[k] + X_y[0] / (2*Nb)
+        for j in range(1, Nb):
+            I_cheb_x[k] = I_cheb_x[k] + (X_x[j]/Nb) * np.cos(j*k*np.pi/Nb)
+            I_cheb_y[k] = I_cheb_y[k] + (X_y[j]/Nb) * np.cos(j*k*np.pi/Nb)
+    
+    '''
+        Compute the integral over the free sheet
+    '''
+
+    for k in prange(Nb + 1):
+        for j in range(Nf-1):
+            ux1,uy1 = K_delta(body_x_cheb[k] - free_sheet_x[j+1],
+                              body_y_cheb[k] - free_sheet_y[j+1],
+                              0
+                              )
+            ux2,uy2 = K_delta(body_x_cheb[k] - free_sheet_x[j],
+                              body_y_cheb[k] - free_sheet_y[j],
+                              0
+                              )
+            I_free_x[k] = I_free_x[k] + 0.5 * (
+                free_sheet_circulation[j+1] - free_sheet_circulation[j]
+            ) * (ux1 + ux2)
+            I_free_y[k] = I_free_y[k] + 0.5 * (
+                free_sheet_circulation[j+1] - free_sheet_circulation[j]
+            ) * (uy1 + uy2)
+    
+    mu = tan_x * (I_cheb_x + I_free_x) + tan_y * (I_cheb_y + I_free_y)
+    tau = tan_x * body_dxdt_cheb + tan_y * body_dydt_cheb
+    
+    for k in range(1, Nb):
+        gamma[k] = sigma[k] / np.sin(k*np.pi/Nb)
+    
+    for k in range(1, Nb + 1):
+        I_dsigmadt[k] = I_dsigmadt[k-1] + (np.pi / (2*Nb)) * (
+            dsigmadt[k] + dsigmadt[k-1]
+        )
+
+    p = (mu - tau) * gamma + I_dsigmadt + dgammadt
+
+    return(p)
 
 @njit(parallel=True)
 def compute_forces(nhat_x,
                    nhat_y,
-                   body_x_coll,
-                   body_y_coll,
-                   body_x_cheb,
-                   body_y_cheb,
-                   body_dxdt_cheb,
-                   body_dydt_cheb,
-                   free_sheet_x,
-                   free_sheet_y,
-                   free_sheet_circulation,
-                   dsigmadt,
-                   dgammadt,
+                   tan_x,
+                   tan_y,
+                   leading_edge_sigmas,
+                   pressures
                    ):
-    return(0)
+    Nb = np.size(pressures[:,0]) - 1
+    Nt = np.size(pressures[0,:])
+
+    Fx = np.zeros(Nt)
+    Fy = np.zeros(Nt)
+
+    for t in prange(Nt):
+        for k in range(1, Nb-1):
+            Fx[t] = Fx[t] - nhat_x[t] * (np.pi / Nb) * pressures[k,t] * np.sin(np.pi * k / Nb)
+            Fy[t] = Fy[t] - nhat_y[t] * (np.pi / Nb) * pressures[k,t] * np.sin(np.pi * k / Nb)
+        
+        suction_x = tan_x[t] * (np.pi / 8) * leading_edge_sigmas[t]**2
+        suction_y = tan_y[t] * (np.pi / 8) * leading_edge_sigmas[t]**2
+
+        Fx[t] = Fx[t] + suction_x
+        Fy[t] = Fy[t] + suction_y
+
+    return Fx,Fy
+
+@njit(parallel=True)
+def compute_power_in(nhat_x,
+                     nhat_y,
+                     body_dxdt,
+                     body_dydt,
+                     pressures
+                  ):
+    Nb = np.size(pressures[:,0]) - 1
+    Nt = np.size(pressures[0,:])
+
+    P = np.zeros(Nt)
+
+    for t in prange(Nt):
+        for k in range(1, Nb):
+            P[t] = P[t] - pressures[k,t] * (
+                body_dxdt[k,t] * nhat_x[t] + body_dydt[k,t] * nhat_y[t]
+            ) * (np.pi / Nb) * np.sin(k * np.pi / Nb)
+    
+    return P
+
+@njit
+def compute_time_average(time, quantity):
+    Nt = np.size(time)
+    time_avg = 0
+
+    for i in range(Nt-1):
+        time_avg = time_avg + 0.5 * (quantity[i+1] + quantity[i]) * (time[i+1] - time[i])
+    
+    time_avg = time_avg / (time[Nt-1] - time[0])
+    
+    return(time_avg)
+
+'''
+    matplotlib helper functions
+'''
 
 def animate_motion(x, y, x_sheet, y_sheet, t, anim_name):
     fig, ax = plt.subplots()
@@ -171,7 +403,6 @@ def animate_motion(x, y, x_sheet, y_sheet, t, anim_name):
         'k-'
     )
 
-    
     sheet_line, = ax.plot(
         x_sheet[:, 0],
         y_sheet[:, 0],
@@ -179,14 +410,13 @@ def animate_motion(x, y, x_sheet, y_sheet, t, anim_name):
         markersize=1
     )
     
-    
     ax.set_xlim(
-        np.nanmin(x) - 0.2,
-        np.nanmax(x) + 0.2
+        min(np.nanmin(x), np.nanmin(x_sheet)) - 0.2,
+        max(np.nanmax(x), np.nanmax(x_sheet)) + 0.2
     )
     ax.set_ylim(
-        np.nanmin(y) - 0.2,
-        np.nanmax(y) + 0.2
+        min(np.nanmin(y), np.nanmin(y_sheet)) - 0.2,
+        max(np.nanmax(y), np.nanmax(y_sheet)) + 0.2
     )
     
     ax.set_aspect('equal')
@@ -194,12 +424,12 @@ def animate_motion(x, y, x_sheet, y_sheet, t, anim_name):
     def update(frame):
         body_line.set_ydata(y[:, frame])
         body_line.set_xdata(x[:, frame])
-        '''
-        sheet_line.set_ydata(np.imag(z_anim_sheet[:, frame]))
-        sheet_line.set_xdata(np.real(z_anim_sheet[:, frame]))
-        '''
+        
+        sheet_line.set_ydata(y_sheet[:, frame])
+        sheet_line.set_xdata(x_sheet[:, frame])
+        
         ax.set_title(f"t={t[frame]:.2f}")
-        return body_line,#, sheet_line
+        return body_line, sheet_line
 
     desired_time = 10  # seconds
     fps_desired = x.shape[1] / desired_time
@@ -216,3 +446,10 @@ def animate_motion(x, y, x_sheet, y_sheet, t, anim_name):
     )
 
     sheet_animation.save(anim_name, writer='ffmpeg', fps=fps_desired)
+
+def plot_time_dependent_quantity(time, quantity, ylabel):
+    fig, ax = plt.subplots()
+    ax.plot(time, quantity)
+    ax.set_xlabel('Time (t)')
+    ax.set_ylabel(ylabel)
+    plt.show()

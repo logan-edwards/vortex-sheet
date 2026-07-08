@@ -23,12 +23,12 @@ class BoundSheet:
         for l in range(params.Nb):
             self.alpha_collocation[l] = -np.cos((2*l+1)*np.pi / (2*params.Nb))
 
-        self.dgammadt = np.zeros(params.Nt)
         self.sigmas = np.zeros((params.Nb+1, params.Nt))
-        #self.pressures = np.zeros((params.Nb+1, params.Nt))
+        self.pressures = np.zeros((params.Nb+1, params.Nt))
         self.dsigmadt = np.zeros((params.Nb+1, params.Nt))
         self.force_x = np.zeros(params.Nt)
         self.force_y = np.zeros(params.Nt)
+        self.power_in = np.zeros(params.Nt)
 
         self.x_chebyshev = np.zeros((params.Nb+1, params.Nt))
         self.y_chebyshev = np.zeros((params.Nb+1, params.Nt))
@@ -81,8 +81,20 @@ class BoundSheet:
 
 class FreeSheet:
     def __init__(self):
-        self.circulation = np.full(params.Nt, np.nan)
-        self.x = np.full((params.Nt, params.Nt), np.nan)
-        self.y = np.full((params.Nt, params.Nt), np.nan)
-        self.dxdt = np.full((params.Nt, params.Nt), np.nan)
-        self.dydt = np.full((params.Nt, params.Nt), np.nan)
+        # change this so that we append, as we did in the previous code.
+        self.circulation = np.zeros(0)
+        self.x = np.zeros(0)
+        self.y = np.zeros(0)
+        self.dxdt = np.zeros(0)
+        self.dydt = np.zeros(0)
+        self.dgammadt = 0
+    def append_circulation(self,
+                           circulation_new,
+                           x_new,
+                           y_new,
+                           ):
+        self.circulation = np.append(self.circulation, circulation_new)
+        self.x = np.append(self.x, x_new)
+        self.y = np.append(self.y, y_new)
+        self.dxdt = np.append(self.dxdt, 0)
+        self.dydt = np.append(self.dydt, 0)
