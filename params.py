@@ -13,7 +13,7 @@ Nt = int(T/dt) + 1
 
 eps_shed = 1e-12
 
-u = 4.0
+u = 1.0
 
 pitching_amplitude = np.pi/9.0
 pitching_phase = 0.0

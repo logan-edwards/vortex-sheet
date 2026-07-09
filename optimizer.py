@@ -1,36 +1,46 @@
-import params
-import classes
 import functions
-import optimizer
+import classes
+import params
 
-import numpy as np
 from scipy.optimize import minimize
+import numpy as np
+import matplotlib.pyplot as plt
 
-def run_sim(
-    heaving_amplitude,
-    heaving_phase,
-    pitching_amplitude,
-    pitching_phase,
-    lengthening_amplitude,
-    lengthening_phase,
-    pivot_location,
-    frequency
-    ):
+def objective(parameters):
+    '''
+    Bound sheet attributes:
+        heaving amplitude
+        heaving phase
+        pitching amplitude
+        pitching phase
+        lengthening amplitude
+        lengthening phase
+        pivot location
+        frequency
+    '''
+
+    frequency = parameters[7]
+
+    t_cutoff = 2/frequency
+    params.T = 5 * t_cutoff
+    params.Nt = int(params.T/params.dt) + 1
 
     if(params.enable_animation == True):
         x_anim_sheet = np.full((params.Nt,params.Nt), np.nan)
         y_anim_sheet = np.full((params.Nt,params.Nt), np.nan)
 
     body = classes.BoundSheet(
-        heaving_amplitude,
-        heaving_phase,
-        pitching_amplitude,
-        pitching_phase,
-        lengthening_amplitude,
-        lengthening_phase,
-        pivot_location,
+        parameters[0],
+        parameters[1],
+        parameters[2],
+        parameters[3],
+        parameters[4],
+        parameters[5],
+        parameters[6],
         frequency
     )
+
+
 
     free_sheet = classes.FreeSheet()
     free_sheet.append_circulation(0,
@@ -137,83 +147,32 @@ def run_sim(
         body.pressures
     )
 
-    if(params.enable_animation == True):
-        functions.animate_motion(
-            body.x_chebyshev, 
-            body.y_chebyshev,
-            x_anim_sheet,
-            y_anim_sheet,
-            np.linspace(0, params.T, params.Nt), 
-            'test_animation.mp4'
-        )
-    
-    return body, free_sheet
-
-def main():
-    '''
-    Optimization parameters:
-        heaving amplitude
-        heaving phase
-        pitching amplitude
-        pitching phase
-        lengthening amplitude
-        lengthening phase
-        pivot location
-        frequency
-    '''
-    
-    t_cutoff = 2 / 0.4
-    params.T = 5 * t_cutoff
-    params.Nt = int(params.T/params.dt) + 1
-    
-    body,free = run_sim(
-        0.375*2,
-        np.pi/2,
-        15*np.pi/180,
-        np.pi/2,
-        0.8,
-        5*np.pi/2,
-        1,
-        0.4
-    )
-    time = np.linspace(0,params.T,params.Nt)
+    time = np.linspace(0, params.T, params.Nt)
     start_index = np.searchsorted(time, t_cutoff, side='right')
-    stop_index = np.searchsorted(time, 3*t_cutoff/2, side='right')
-    print(f"Start index = {start_index}, final index = {stop_index}")
-    time_truncated = time[start_index:stop_index]
-    force_x_truncated = body.force_x[start_index:stop_index]
-    power_truncated = body.power_in[start_index:stop_index]
+    print(f"Start index = {start_index}, final index = {params.Nt}")
+    time_truncated = time[start_index:]
+    force_x_truncated = body.force_x[start_index:]
+    force_y_truncated = body.force_y[start_index:]
+    power_truncated = body.power_in[start_index:]
 
-    time_steady = time[start_index:]
-    force_x_steady = body.force_x[start_index:]
-    power_steady = body.power_in[start_index:]
+    thrust_avg = functions.compute_time_average(
+        time_truncated,
+        force_x_truncated
+    )
+    lift_avg = functions.compute_time_average(
+        time_truncated,
+        force_y_truncated
+    )
+    power_avg = functions.compute_time_average(
+        time_truncated,
+        power_truncated
+    )
 
-    print(f"Time between {time[start_index]} and {time[stop_index]}")
+    sigma_lead_truncated = body.sigmas[params.Nb,start_index:]
 
-    avg_thrust_trunc = functions.compute_time_average(time_truncated,
-                                                      force_x_truncated
-                                                      )
-    avg_thrust_steady = functions.compute_time_average(time_steady,
-                                                       force_x_steady
-                                                       )
-    print(f"One-period thrust = {avg_thrust_trunc}\n Steady Thrust = {avg_thrust_steady}")
-    functions.plot_time_dependent_quantity(time_steady, force_x_steady,'thrust')
-
-    avg_power_trunc = functions.compute_time_average(time_truncated,
-                                                     power_truncated)
-    avg_power_steady = functions.compute_time_average(time_steady,
-                                                      power_steady)
-    print(f"One period power: {avg_power_trunc}, steady power: {avg_power_steady}")
-    functions.plot_time_dependent_quantity(time_steady, power_steady,'power')
-
-    print(f"Efficiencies are (one period){avg_thrust_trunc * params.u / avg_power_trunc} and (many-period) {avg_thrust_steady * params.u / avg_power_steady}")
-
-
-            
-            
-            
-
-
-
- 
-main()
+    if abs(power_avg) < 1e-9:
+        return 1e9
+    else:
+        froude_eff = thrust_avg * params.u / power_avg
+        max_sigma = np.max(np.abs(sigma_lead_truncated))
+        return -froude_eff + 10 * max_sigma**2

@@ -453,3 +453,22 @@ def plot_time_dependent_quantity(time, quantity, ylabel):
     ax.set_xlabel('Time (t)')
     ax.set_ylabel(ylabel)
     plt.show()
+
+def plot_polar(angle, radius, quantity, label):
+    # 1. Generate sample data (theta in radians, r as radius)
+    # 2. Create figure and polar axis
+
+    theta_grid, r_grid = np.meshgrid(angle, radius)
+
+    fig, ax = plt.subplots(subplot_kw={'projection': 'polar'})
+
+    pcm = ax.contourf(theta_grid, r_grid, quantity, label, levels=50, cmap="viridis")
+
+    cbar = fig.colorbar(pcm, ax=ax, pad=0.1)
+    cbar.set_label(label)
+
+    ax.set_title(label, va="bottom")
+    ax.grid(True)
+
+    plt.legend()
+    plt.show()
