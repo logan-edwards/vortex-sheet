@@ -486,7 +486,7 @@ def write_report(data, data_labels, filename):
         writer = csv.writer(f)
 
         # Write header if file is new or empty
-        if (not os.path.exists(filename)) or (os.path.getsize(filename == 0)):
+        if ((not os.path.exists(filename)) or (os.path.getsize(filename) == 0)):
             writer.writerow(data_labels)
 
         # Handle dict data

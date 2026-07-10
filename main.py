@@ -165,70 +165,84 @@ def main():
         frequency
     '''
 
+    params.enable_animation = False
     t_cutoff = 2 / 0.25
     params.T = 5 * t_cutoff
     params.Nt = int(params.T/params.dt) + 1
 
     phi_params = np.linspace(0, 2*np.pi, 12)
-    length_params = np.linspace(-0.5, 0.5, 5)
-    pitch_params = np.pi * np.linspace(1.0/16, 4.0/16, 4)
-    heave_params = np.linspace(0.1, 0.5, 5)
+    length_params = np.zeros(4)
+    length_params[0] = -0.5
+    length_params[1] = -0.25
+    length_params[2] = 0.25
+    length_params[3] = 0.5
 
+    saved_efficiencies = np.zeros((4, 12))
+    saved_LES = np.zeros((4,12))
 
+    for phi_index in range(np.size(phi_params)):
+        for length_index in range(np.size(length_params)):
+            print(f"--- Running with phi = {phi_params[phi_index]}, % lengthening = {length_params[length_index]}")
+            body,free = run_sim(
+                0.1,
+                0,
+                np.pi / 9.0,
+                9.0 * np.pi / 4.0,
+                length_params[length_index],
+                phi_params[phi_index],
+                1,
+                0.25
+            )
+            time = np.linspace(0,params.T,params.Nt)
+            start_index = np.searchsorted(time, t_cutoff, side='right')
 
-    body,free = run_sim(
-        0.375*2,
-        0,
-        np.pi / 9.0,
-        9.0 * np.pi / 4.0,
-        0,
-        0,
-        1,
-        0.25
+            time_steady = time[start_index:]
+            force_x_steady = body.force_x[start_index:]
+            power_steady = body.power_in[start_index:]
+
+            avg_thrust_steady = functions.compute_time_average(time_steady,
+                                                            force_x_steady
+                                                            )
+
+            avg_power_steady = functions.compute_time_average(time_steady,
+                                                            power_steady)
+
+            print(f"Efficiency = {avg_thrust_steady * params.u / avg_power_steady}")
+
+            functions.write_report([
+                phi_params[phi_index],
+                length_params[length_index],
+                avg_thrust_steady,
+                avg_power_steady,
+                np.abs(avg_thrust_steady) * params.u / np.abs(avg_power_steady),
+                np.max(np.abs(body.sigmas[params.Nb,start_index:]))
+            ],
+            [
+                'phi',
+                'length ratio',
+                'thrust',
+                'power',
+                'efficiency',
+                'LE sigma magnitude'
+            ],
+            'lengthening_report.csv')
+
+            saved_efficiencies[phi_index, length_index] = np.abs(avg_thrust_steady) * params.u / np.abs(avg_power_steady)
+            saved_LES[phi_index, length_index] = np.max(np.abs(body.sigmas[params.Nb,start_index:]))
+
+    functions.plot_polar(
+        phi_params,
+        length_params,
+        saved_efficiencies,
+        'Thrust Efficiency'
     )
-    time = np.linspace(0,params.T,params.Nt)
-    start_index = np.searchsorted(time, t_cutoff, side='right')
-    stop_index = np.searchsorted(time, 3*t_cutoff/2, side='right')
-    print(f"Start index = {start_index}, final index = {stop_index}")
-    time_truncated = time[start_index:stop_index]
-    force_x_truncated = body.force_x[start_index:stop_index]
-    power_truncated = body.power_in[start_index:stop_index]
 
-    time_steady = time[start_index:]
-    force_x_steady = body.force_x[start_index:]
-    power_steady = body.power_in[start_index:]
-
-    print(f"Time between {time[start_index]} and {time[stop_index]}")
-
-    avg_thrust_trunc = functions.compute_time_average(time_truncated,
-                                                      force_x_truncated
-                                                      )
-    avg_thrust_steady = functions.compute_time_average(time_steady,
-                                                       force_x_steady
-                                                       )
-    print(f"One-period thrust = {avg_thrust_trunc}\n Steady Thrust = {avg_thrust_steady}")
-    functions.plot_time_dependent_quantity(time_steady, force_x_steady,'thrust')
-
-    avg_power_trunc = functions.compute_time_average(time_truncated,
-                                                     power_truncated)
-    avg_power_steady = functions.compute_time_average(time_steady,
-                                                      power_steady)
-    print(f"One period power: {avg_power_trunc}, steady power: {avg_power_steady}")
-    functions.plot_time_dependent_quantity(time_steady, power_steady,'power')
-
-    print(f"Efficiencies are (one period){avg_thrust_trunc * params.u / avg_power_trunc} and (many-period) {avg_thrust_steady * params.u / avg_power_steady}")
-
-    functions.write_report([
-        avg_thrust_steady,
-        avg_power_steady,
-        np.abs(avg_thrust_steady) * params.u / np.bas(avg_power_steady)
-    ],
-    [
-        'thrust',
-        'power',
-        'efficiency'
-    ],
-    'test_report')
+    function.plot_polar(
+        phi_params,
+        length_params,
+        saved_LES,
+        'Leading Edge Sigma'
+    )
 
 
             
