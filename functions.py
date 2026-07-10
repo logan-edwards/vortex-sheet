@@ -4,6 +4,10 @@ from numba import njit, prange
 import matplotlib.pyplot as plt
 import matplotlib.animation as animation
 
+import csv
+import os
+
+
 '''
     Vortex sheet method functions
 '''
@@ -249,7 +253,8 @@ def compute_pressure_distribution(tan_x,
                                   free_sheet_circulation,
                                   sigma,
                                   dsigmadt,
-                                  dgammadt
+                                  dgammadt,
+                                  L
                                   ):
     Nb = np.size(body_x_coll)
     Nf = np.size(free_sheet_x)
@@ -320,7 +325,7 @@ def compute_pressure_distribution(tan_x,
     tau = tan_x * body_dxdt_cheb + tan_y * body_dydt_cheb
     
     for k in range(1, Nb):
-        gamma[k] = sigma[k] / np.sin(k*np.pi/Nb)
+        gamma[k] = sigma[k] / (L * np.sin(k*np.pi/Nb))
     
     for k in range(1, Nb + 1):
         I_dsigmadt[k] = I_dsigmadt[k-1] + (np.pi / (2*Nb)) * (
@@ -337,7 +342,8 @@ def compute_forces(nhat_x,
                    tan_x,
                    tan_y,
                    leading_edge_sigmas,
-                   pressures
+                   pressures,
+                   L
                    ):
     Nb = np.size(pressures[:,0]) - 1
     Nt = np.size(pressures[0,:])
@@ -347,11 +353,11 @@ def compute_forces(nhat_x,
 
     for t in prange(Nt):
         for k in range(1, Nb-1):
-            Fx[t] = Fx[t] - nhat_x[t] * (np.pi / Nb) * pressures[k,t] * np.sin(np.pi * k / Nb)
-            Fy[t] = Fy[t] - nhat_y[t] * (np.pi / Nb) * pressures[k,t] * np.sin(np.pi * k / Nb)
+            Fx[t] = Fx[t] - nhat_x[t] * L[t] * (np.pi / Nb) * pressures[k,t] * np.sin(np.pi * k / Nb)
+            Fy[t] = Fy[t] - nhat_y[t] * L[t] * (np.pi / Nb) * pressures[k,t] * np.sin(np.pi * k / Nb)
         
-        suction_x = tan_x[t] * (np.pi / 8) * leading_edge_sigmas[t]**2
-        suction_y = tan_y[t] * (np.pi / 8) * leading_edge_sigmas[t]**2
+        suction_x = tan_x[t] * (np.pi / 8) * (leading_edge_sigmas[t]/L[t])**2 # does this need to scale by length?
+        suction_y = tan_y[t] * (np.pi / 8) * (leading_edge_sigmas[t]/L[t])**2 # does this need to scale by length?
 
         Fx[t] = Fx[t] + suction_x
         Fy[t] = Fy[t] + suction_y
@@ -363,7 +369,8 @@ def compute_power_in(nhat_x,
                      nhat_y,
                      body_dxdt,
                      body_dydt,
-                     pressures
+                     pressures,
+                     L
                   ):
     Nb = np.size(pressures[:,0]) - 1
     Nt = np.size(pressures[0,:])
@@ -374,7 +381,7 @@ def compute_power_in(nhat_x,
         for k in range(1, Nb):
             P[t] = P[t] - pressures[k,t] * (
                 body_dxdt[k,t] * nhat_x[t] + body_dydt[k,t] * nhat_y[t]
-            ) * (np.pi / Nb) * np.sin(k * np.pi / Nb)
+            ) * L[t] * (np.pi / Nb) * np.sin(k * np.pi / Nb)
     
     return P
 
@@ -472,3 +479,22 @@ def plot_polar(angle, radius, quantity, label):
 
     plt.legend()
     plt.show()
+
+def write_report(data, data_labels, filename):
+
+    with open(filename, mode="a", newline="") as f:
+        writer = csv.writer(f)
+
+        # Write header if file is new or empty
+        if (not os.path.exists(filename)) or (os.path.getsize(filename == 0)):
+            writer.writerow(data_labels)
+
+        # Handle dict data
+        if isinstance(data, dict):
+            row = [data.get(label, "") for label in data_labels]
+        else:
+            row = list(np.asarray(data).ravel())
+
+        writer.writerow(row)
+    
+    return(0)

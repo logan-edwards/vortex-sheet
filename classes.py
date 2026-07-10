@@ -34,6 +34,7 @@ class BoundSheet:
         self.y_chebyshev = np.zeros((params.Nb+1, params.Nt))
         self.dxdt_chebyshev = np.zeros((params.Nb+1, params.Nt))
         self.dydt_chebyshev = np.zeros((params.Nb+1, params.Nt))
+        self.dsdalpha = np.zeros(params.Nt)
 
         self.x_collocation = np.zeros((params.Nb, params.Nt))
         self.y_collocation = np.zeros((params.Nb, params.Nt))
@@ -68,6 +69,8 @@ class BoundSheet:
                 self.y_chebyshev[k, t] = c[t] + L[t] * (self.alpha_chebyshev[k] - pivot_loc) * np.sin(theta[t])
                 self.dxdt_chebyshev[k, t] = dLdt[t] * (self.alpha_chebyshev[k] - pivot_loc) * np.cos(theta[t]) + L[t] * (self.alpha_chebyshev[k] - pivot_loc) * -np.sin(theta[t]) * dthetadt[t] + params.u
                 self.dydt_chebyshev[k, t] = dcdt[t] + dLdt[t] * (self.alpha_chebyshev[k] - pivot_loc) * np.sin(theta[t]) + L[t] * (self.alpha_chebyshev[k] - pivot_loc) *np.cos(theta[t]) * dthetadt[t]
+            self.dsdalpha[t] = L[t] # dsdalpha only varies in time with this setup
+
             for l in range(params.Nb):
                 self.x_collocation[l, t] = L[t] * (self.alpha_collocation[l] - pivot_loc) * np.cos(theta[t]) + params.dt * t * params.u
                 self.y_collocation[l, t] = c[t] + L[t] * (self.alpha_collocation[l] - pivot_loc) * np.sin(theta[t])

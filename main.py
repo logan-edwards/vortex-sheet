@@ -117,7 +117,8 @@ def run_sim(
             free_sheet.circulation,
             body.sigmas[:,timestep],
             body.dsigmadt[:,timestep],
-            free_sheet.dgammadt
+            free_sheet.dgammadt,
+            body.dsdalpha[timestep]
         )
 
     body.force_x, body.force_y = functions.compute_forces(
@@ -126,7 +127,8 @@ def run_sim(
         body.tangent_x,
         body.tangent_y,
         body.sigmas[params.Nb,:],
-        body.pressures
+        body.pressures,
+        body.dsdalpha
     )
 
     body.power_in = functions.compute_power_in(
@@ -134,7 +136,8 @@ def run_sim(
         body.normal_y,
         body.dxdt_chebyshev,
         body.dydt_chebyshev,
-        body.pressures
+        body.pressures,
+        body.dsdalpha
     )
 
     if(params.enable_animation == True):
@@ -161,20 +164,27 @@ def main():
         pivot location
         frequency
     '''
-    
-    t_cutoff = 2 / 0.4
+
+    t_cutoff = 2 / 0.25
     params.T = 5 * t_cutoff
     params.Nt = int(params.T/params.dt) + 1
-    
+
+    phi_params = np.linspace(0, 2*np.pi, 12)
+    length_params = np.linspace(-0.5, 0.5, 5)
+    pitch_params = np.pi * np.linspace(1.0/16, 4.0/16, 4)
+    heave_params = np.linspace(0.1, 0.5, 5)
+
+
+
     body,free = run_sim(
         0.375*2,
-        np.pi/2,
-        15*np.pi/180,
-        np.pi/2,
-        0.8,
-        5*np.pi/2,
+        0,
+        np.pi / 9.0,
+        9.0 * np.pi / 4.0,
+        0,
+        0,
         1,
-        0.4
+        0.25
     )
     time = np.linspace(0,params.T,params.Nt)
     start_index = np.searchsorted(time, t_cutoff, side='right')
@@ -207,6 +217,18 @@ def main():
     functions.plot_time_dependent_quantity(time_steady, power_steady,'power')
 
     print(f"Efficiencies are (one period){avg_thrust_trunc * params.u / avg_power_trunc} and (many-period) {avg_thrust_steady * params.u / avg_power_steady}")
+
+    functions.write_report([
+        avg_thrust_steady,
+        avg_power_steady,
+        np.abs(avg_thrust_steady) * params.u / np.bas(avg_power_steady)
+    ],
+    [
+        'thrust',
+        'power',
+        'efficiency'
+    ],
+    'test_report')
 
 
             
