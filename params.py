@@ -25,3 +25,4 @@ lengthening_amplitude = 1.5
 lengthening_phase = np.pi/4.0
 
 enable_animation = True
+scipy_iteration = 0

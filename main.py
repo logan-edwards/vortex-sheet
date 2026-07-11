@@ -166,88 +166,148 @@ def main():
     '''
 
     params.enable_animation = False
-    t_cutoff = 2 / 0.25
+    run_sweep = False
+    run_optimizer = True
+    
+    if run_sweep == True:
+        t_cutoff = 2 / 0.25
+        params.T = 5 * t_cutoff
+        params.Nt = int(params.T/params.dt) + 1
+
+        phi_params = np.linspace(0, 2*np.pi, 12)
+        length_params = np.zeros(4)
+        length_params[0] = -0.5
+        length_params[1] = -0.25
+        length_params[2] = 0.25
+        length_params[3] = 0.5
+
+        saved_efficiencies = np.zeros((np.size(phi_params), np.size(length_params)))
+        saved_LES = np.zeros((np.size(phi_params),np.size(length_params)))
+
+        for phi_index in range(np.size(phi_params)):
+            for length_index in range(np.size(length_params)):
+                print(f"--- Running with phi = {phi_params[phi_index]}, % lengthening = {length_params[length_index]}")
+                body,free = run_sim(
+                    0.1,
+                    0,
+                    np.pi / 9.0,
+                    9.0 * np.pi / 4.0,
+                    length_params[length_index],
+                    phi_params[phi_index],
+                    1,
+                    0.25
+                )
+                time = np.linspace(0,params.T,params.Nt)
+                start_index = np.searchsorted(time, t_cutoff, side='right')
+
+                time_steady = time[start_index:]
+                force_x_steady = body.force_x[start_index:]
+                power_steady = body.power_in[start_index:]
+
+                avg_thrust_steady = functions.compute_time_average(time_steady,
+                                                                force_x_steady
+                                                                )
+
+                avg_power_steady = functions.compute_time_average(time_steady,
+                                                                power_steady)
+
+                print(f"Efficiency = {avg_thrust_steady * params.u / avg_power_steady}")
+
+                functions.write_report([
+                    phi_params[phi_index],
+                    length_params[length_index],
+                    avg_thrust_steady,
+                    avg_power_steady,
+                    np.abs(avg_thrust_steady) * params.u / np.abs(avg_power_steady),
+                    np.max(np.abs(body.sigmas[params.Nb,start_index:]))
+                ],
+                [
+                    'phi',
+                    'length ratio',
+                    'thrust',
+                    'power',
+                    'efficiency',
+                    'LE sigma magnitude'
+                ],
+                'lengthening_report.csv')
+
+                saved_efficiencies[phi_index, length_index] = np.abs(avg_thrust_steady) * params.u / np.abs(avg_power_steady)
+                saved_LES[phi_index, length_index] = np.max(np.abs(body.sigmas[params.Nb,start_index:]))
+
+        functions.plot_polar(
+            phi_params,
+            length_params,
+            np.transpose(saved_efficiencies),
+            'Thrust Efficiency'
+        )
+
+        functions.plot_polar(
+            phi_params,
+            length_params,
+            np.transpose(saved_LES),
+            'Leading Edge Sigma'
+        )
+
+    initial_guess = np.zeros(7)
+    # heaving amplitude, phase
+    initial_guess[0] = 0.1
+    initial_guess[1] = 0
+    # pitching amplitude, phase
+    initial_guess[2] = np.pi / 9.0
+    initial_guess[3] = 9.0 * np.pi / 4.0
+    # lengthening %, phase
+    initial_guess[4] = -0.5
+    initial_guess[5] = np.pi
+    # pivot location
+    initial_guess[6] = 0.9
+    
+    if run_optimizer == True:
+        result = minimize(
+            optimizer.objective,
+            initial_guess,
+            method='L-BFGS-B',
+            jac='2-point',
+            bounds=[
+                (0,1),
+                (0,2*np.pi),
+                (0,np.pi/4),
+                (0,2*np.pi),
+                (-0.95,0.95),
+                (0,2*np.pi),
+                (-1.0,1.0)
+            ],
+            tol=1e-6,
+            options={
+                'maxiter': 50
+            }
+        )
+        print(f"Success status = {result.success} in iterations {result.nfev}, message = {result.message}")
+        print(f"Gradient at optimal solution = {result.jac}")
+        print(f"Optimal efficiency (WITH PENALTY) = {-result.fun}")
+        print(f"Obtained with parameter set: {result.x}")
+
+    '''t_cutoff = 2 / 0.25
     params.T = 5 * t_cutoff
     params.Nt = int(params.T/params.dt) + 1
 
-    phi_params = np.linspace(0, 2*np.pi, 12)
-    length_params = np.zeros(4)
-    length_params[0] = -0.5
-    length_params[1] = -0.25
-    length_params[2] = 0.25
-    length_params[3] = 0.5
+    run_sim(
+        0.1,
+        0,
+        np.pi / 9.0,
+        9.0 * np.pi / 4.0,
+        -0.5,
+        np.pi,
+        1,
+        0.25
+    )'''
 
-    saved_efficiencies = np.zeros((4, 12))
-    saved_LES = np.zeros((4,12))
-
-    for phi_index in range(np.size(phi_params)):
-        for length_index in range(np.size(length_params)):
-            print(f"--- Running with phi = {phi_params[phi_index]}, % lengthening = {length_params[length_index]}")
-            body,free = run_sim(
-                0.1,
-                0,
-                np.pi / 9.0,
-                9.0 * np.pi / 4.0,
-                length_params[length_index],
-                phi_params[phi_index],
-                1,
-                0.25
-            )
-            time = np.linspace(0,params.T,params.Nt)
-            start_index = np.searchsorted(time, t_cutoff, side='right')
-
-            time_steady = time[start_index:]
-            force_x_steady = body.force_x[start_index:]
-            power_steady = body.power_in[start_index:]
-
-            avg_thrust_steady = functions.compute_time_average(time_steady,
-                                                            force_x_steady
-                                                            )
-
-            avg_power_steady = functions.compute_time_average(time_steady,
-                                                            power_steady)
-
-            print(f"Efficiency = {avg_thrust_steady * params.u / avg_power_steady}")
-
-            functions.write_report([
-                phi_params[phi_index],
-                length_params[length_index],
-                avg_thrust_steady,
-                avg_power_steady,
-                np.abs(avg_thrust_steady) * params.u / np.abs(avg_power_steady),
-                np.max(np.abs(body.sigmas[params.Nb,start_index:]))
-            ],
-            [
-                'phi',
-                'length ratio',
-                'thrust',
-                'power',
-                'efficiency',
-                'LE sigma magnitude'
-            ],
-            'lengthening_report.csv')
-
-            saved_efficiencies[phi_index, length_index] = np.abs(avg_thrust_steady) * params.u / np.abs(avg_power_steady)
-            saved_LES[phi_index, length_index] = np.max(np.abs(body.sigmas[params.Nb,start_index:]))
-
-    functions.plot_polar(
-        phi_params,
-        length_params,
-        saved_efficiencies,
-        'Thrust Efficiency'
-    )
-
-    function.plot_polar(
-        phi_params,
-        length_params,
-        saved_LES,
-        'Leading Edge Sigma'
-    )
+    
+    
 
 
-            
-            
-            
+                
+                
+                
 
 
 

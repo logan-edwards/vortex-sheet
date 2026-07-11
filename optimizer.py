@@ -19,7 +19,7 @@ def objective(parameters):
         frequency
     '''
 
-    frequency = parameters[7]
+    frequency = 0.4
 
     t_cutoff = 2/frequency
     params.T = 5 * t_cutoff
@@ -127,7 +127,8 @@ def objective(parameters):
             free_sheet.circulation,
             body.sigmas[:,timestep],
             body.dsigmadt[:,timestep],
-            free_sheet.dgammadt
+            free_sheet.dgammadt,
+            body.dsdalpha[timestep]
         )
 
     body.force_x, body.force_y = functions.compute_forces(
@@ -136,7 +137,8 @@ def objective(parameters):
         body.tangent_x,
         body.tangent_y,
         body.sigmas[params.Nb,:],
-        body.pressures
+        body.pressures,
+        body.dsdalpha
     )
 
     body.power_in = functions.compute_power_in(
@@ -144,12 +146,12 @@ def objective(parameters):
         body.normal_y,
         body.dxdt_chebyshev,
         body.dydt_chebyshev,
-        body.pressures
+        body.pressures,
+        body.dsdalpha
     )
 
     time = np.linspace(0, params.T, params.Nt)
     start_index = np.searchsorted(time, t_cutoff, side='right')
-    print(f"Start index = {start_index}, final index = {params.Nt}")
     time_truncated = time[start_index:]
     force_x_truncated = body.force_x[start_index:]
     force_y_truncated = body.force_y[start_index:]
@@ -170,9 +172,13 @@ def objective(parameters):
 
     sigma_lead_truncated = body.sigmas[params.Nb,start_index:]
 
-    if abs(power_avg) < 1e-9:
+    params.scipy_iteration = params.scipy_iteration + 1
+
+    if abs(power_avg) < 1e-6:
+        print(f"ITER {params.scipy_iteration}\t penalized infinite eff")
         return 1e9
     else:
-        froude_eff = thrust_avg * params.u / power_avg
+        froude_eff = np.abs(thrust_avg) * params.u / np.abs(power_avg)
+        print(f"ITER {params.scipy_iteration}\t eff = {froude_eff}")
         max_sigma = np.max(np.abs(sigma_lead_truncated))
         return -froude_eff + 10 * max_sigma**2
