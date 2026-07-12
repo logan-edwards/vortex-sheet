@@ -15,14 +15,9 @@ eps_shed = 1e-12
 
 u = 1.0
 
-pitching_amplitude = np.pi/9.0
-pitching_phase = 0.0
-
-heaving_amplitude = 0.5
-heaving_phase = 0.0
-
-lengthening_amplitude = 1.5
-lengthening_phase = np.pi/4.0
-
+'''
+    Misc parameters
+'''
 enable_animation = True
 scipy_iteration = 0
+sim_start_time = 0

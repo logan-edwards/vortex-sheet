@@ -4,7 +4,7 @@ import params
 
 from scipy.optimize import minimize
 import numpy as np
-import matplotlib.pyplot as plt
+from time import time_ns
 
 def objective(parameters):
     '''
@@ -36,7 +36,7 @@ def objective(parameters):
         parameters[3],
         parameters[4],
         parameters[5],
-        parameters[6],
+        1.0,
         frequency
     )
 
@@ -174,11 +174,15 @@ def objective(parameters):
 
     params.scipy_iteration = params.scipy_iteration + 1
 
+    print(f"Runtime {(time_ns() - params.sim_start_time)*1e-9}")
     if abs(power_avg) < 1e-6:
         print(f"ITER {params.scipy_iteration}\t penalized infinite eff")
         return 1e9
     else:
         froude_eff = np.abs(thrust_avg) * params.u / np.abs(power_avg)
         print(f"ITER {params.scipy_iteration}\t eff = {froude_eff}")
+        if(froude_eff > 1):
+            print(f"\t ^ --- efficiency too large, imposing large penalty")
+            return 1e9
         max_sigma = np.max(np.abs(sigma_lead_truncated))
-        return -froude_eff + 10 * max_sigma**2
+        return (max_sigma**2 - froude_eff)

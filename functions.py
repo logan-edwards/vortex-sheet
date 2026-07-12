@@ -477,7 +477,6 @@ def plot_polar(angle, radius, quantity, label):
     ax.set_title(label, va="bottom")
     ax.grid(True)
 
-    plt.legend()
     plt.show()
 
 def write_report(data, data_labels, filename):

@@ -5,7 +5,7 @@ import optimizer
 
 import numpy as np
 from scipy.optimize import minimize
-
+from time import time_ns
 def run_sim(
     heaving_amplitude,
     heaving_phase,
@@ -174,28 +174,27 @@ def main():
         params.T = 5 * t_cutoff
         params.Nt = int(params.T/params.dt) + 1
 
-        phi_params = np.linspace(0, 2*np.pi, 12)
-        length_params = np.zeros(4)
-        length_params[0] = -0.5
-        length_params[1] = -0.25
-        length_params[2] = 0.25
-        length_params[3] = 0.5
+        phi_params = np.linspace(0, 2*np.pi, 36)
+        frequency_params = np.linspace(0.2, 0.8, 8)
 
-        saved_efficiencies = np.zeros((np.size(phi_params), np.size(length_params)))
-        saved_LES = np.zeros((np.size(phi_params),np.size(length_params)))
+        saved_efficiencies = np.zeros((np.size(phi_params), np.size(frequency_params)))
+        saved_LES = np.zeros((np.size(phi_params),np.size(frequency_params)))
+        saved_thrust = np.zeros((np.size(phi_params),np.size(frequency_params)))
+        saved_power = np.zeros((np.size(phi_params),np.size(frequency_params)))
+        saved_St = np.zeros((np.size(phi_params),np.size(frequency_params)))
 
         for phi_index in range(np.size(phi_params)):
-            for length_index in range(np.size(length_params)):
-                print(f"--- Running with phi = {phi_params[phi_index]}, % lengthening = {length_params[length_index]}")
+            for frequency_index in range(np.size(frequency_params)):
+                print(f"--- Running with phi = {phi_params[phi_index]/np.pi}pi, frequency = {frequency_params[frequency_index]} Hz")
                 body,free = run_sim(
-                    0.1,
-                    0,
-                    np.pi / 9.0,
-                    9.0 * np.pi / 4.0,
-                    length_params[length_index],
+                    0.375*2,
+                    270.0 * np.pi / 180.0,
+                    15.0 * np.pi / 180.0,
+                    0.0,
+                    -0.5,
                     phi_params[phi_index],
                     1,
-                    0.25
+                    frequency_params[frequency_index]
                 )
                 time = np.linspace(0,params.T,params.Nt)
                 start_index = np.searchsorted(time, t_cutoff, side='right')
@@ -215,7 +214,7 @@ def main():
 
                 functions.write_report([
                     phi_params[phi_index],
-                    length_params[length_index],
+                    frequency_params[frequency_index],
                     avg_thrust_steady,
                     avg_power_steady,
                     np.abs(avg_thrust_steady) * params.u / np.abs(avg_power_steady),
@@ -223,50 +222,70 @@ def main():
                 ],
                 [
                     'phi',
-                    'length ratio',
+                    'frequency',
                     'thrust',
                     'power',
                     'efficiency',
                     'LE sigma magnitude'
                 ],
-                'lengthening_report.csv')
+                'freq_based_lengthening.csv')
 
-                saved_efficiencies[phi_index, length_index] = np.abs(avg_thrust_steady) * params.u / np.abs(avg_power_steady)
-                saved_LES[phi_index, length_index] = np.max(np.abs(body.sigmas[params.Nb,start_index:]))
+                if(avg_thrust_steady < 0):
+                    avg_thrust_steady = 0
+
+                saved_efficiencies[phi_index, frequency_index] = np.abs(avg_thrust_steady) * params.u / np.abs(avg_power_steady)
+                saved_LES[phi_index, frequency_index] = np.max(np.abs(body.sigmas[params.Nb,start_index:]))
+                saved_thrust[phi_index, frequency_index] = avg_thrust_steady
+                saved_power[phi_index, frequency_index] = avg_power_steady
+                saved_St[phi_index, frequency_index] = frequency_params[frequency_index] * 2 / params.u
 
         functions.plot_polar(
             phi_params,
-            length_params,
+            frequency_params,
             np.transpose(saved_efficiencies),
-            'Thrust Efficiency'
+            'Efficiency'
         )
 
         functions.plot_polar(
             phi_params,
-            length_params,
+            frequency_params,
             np.transpose(saved_LES),
             'Leading Edge Sigma'
         )
 
-    initial_guess = np.zeros(7)
-    # heaving amplitude, phase
-    initial_guess[0] = 0.1
-    initial_guess[1] = 0
-    # pitching amplitude, phase
-    initial_guess[2] = np.pi / 9.0
-    initial_guess[3] = 9.0 * np.pi / 4.0
-    # lengthening %, phase
-    initial_guess[4] = -0.5
-    initial_guess[5] = np.pi
-    # pivot location
-    initial_guess[6] = 0.9
+        functions.plot_polar(
+            phi_params,
+            frequency_params,
+            np.transpose(saved_thrust),
+            'Thrust'
+        )
+
+        functions.plot_polar(
+            phi_params,
+            frequency_params,
+            np.transpose(saved_power),
+            'Power'
+        )
     
     if run_optimizer == True:
+        params.sim_start_time = time_ns()
+        initial_guess = np.zeros(6)
+        # heaving amplitude, phase
+        initial_guess[0] = 0.1
+        initial_guess[1] = 0
+        # pitching amplitude, phase
+        initial_guess[2] = np.pi / 9.0
+        initial_guess[3] = 3.0 * np.pi / 2.0
+        # lengthening %, phase
+        initial_guess[4] = -0.5
+        initial_guess[5] = np.pi
+        # pivot location
+        #initial_guess[6] = 1.0
         result = minimize(
             optimizer.objective,
             initial_guess,
             method='L-BFGS-B',
-            jac='2-point',
+            jac='cs',
             bounds=[
                 (0,1),
                 (0,2*np.pi),
@@ -274,11 +293,10 @@ def main():
                 (0,2*np.pi),
                 (-0.95,0.95),
                 (0,2*np.pi),
-                (-1.0,1.0)
             ],
             tol=1e-6,
             options={
-                'maxiter': 50
+                'maxiter': 500
             }
         )
         print(f"Success status = {result.success} in iterations {result.nfev}, message = {result.message}")
