@@ -5,7 +5,7 @@
 import numpy as np
 
 Nb = 100
-delta = 0.08
+delta = 0.2
 
 T = 5
 dt = 0.01

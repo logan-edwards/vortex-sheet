@@ -254,7 +254,8 @@ def compute_pressure_distribution(tan_x,
                                   sigma,
                                   dsigmadt,
                                   dgammadt,
-                                  L
+                                  L,
+                                  Ldot
                                   ):
     Nb = np.size(body_x_coll)
     Nf = np.size(free_sheet_x)
@@ -272,6 +273,7 @@ def compute_pressure_distribution(tan_x,
     I_free_x = np.zeros(Nb + 1)
     I_free_y = np.zeros(Nb + 1)
     I_dsigmadt = np.zeros(Nb + 1)
+    I_sigma = np.zeros(Nb + 1)
 
     '''
         Reconstruct the integral at the chebyshev nodes using collocation data
@@ -332,7 +334,12 @@ def compute_pressure_distribution(tan_x,
             dsigmadt[k] + dsigmadt[k-1]
         )
 
-    p = (mu - tau) * gamma + I_dsigmadt + dgammadt
+    for k in range(1, Nb + 1):
+        I_sigma[k] = I_sigma[k-1] + (np.pi / (2*Nb)) * (
+            sigma[k] + sigma[k-1]
+        )
+
+    p = (mu - tau) * gamma + L * I_dsigmadt + Ldot * I_sigma + dgammadt
 
     return(p)
 
@@ -356,8 +363,12 @@ def compute_forces(nhat_x,
             Fx[t] = Fx[t] - nhat_x[t] * L[t] * (np.pi / Nb) * pressures[k,t] * np.sin(np.pi * k / Nb)
             Fy[t] = Fy[t] - nhat_y[t] * L[t] * (np.pi / Nb) * pressures[k,t] * np.sin(np.pi * k / Nb)
         
-        suction_x = tan_x[t] * (np.pi / 8) * (leading_edge_sigmas[t]/L[t])**2 # does this need to scale by length?
-        suction_y = tan_y[t] * (np.pi / 8) * (leading_edge_sigmas[t]/L[t])**2 # does this need to scale by length?
+        ''' 
+            Check against Shelley and Alben: does leading_edge_sigma depend on 
+            s or alpha, i.e. does it have a length factor? 
+        '''
+        suction_x = tan_x[t] * (np.pi / 8) * (leading_edge_sigmas[t] / L[t])**2 # does this need to scale by 1/length?
+        suction_y = tan_y[t] * (np.pi / 8) * (leading_edge_sigmas[t] / L[t])**2 # does this need to scale by 1/length?
 
         Fx[t] = Fx[t] + suction_x
         Fy[t] = Fy[t] + suction_y
@@ -379,7 +390,7 @@ def compute_power_in(nhat_x,
 
     for t in prange(Nt):
         for k in range(1, Nb):
-            P[t] = P[t] - pressures[k,t] * (
+            P[t] = P[t] + pressures[k,t] * (
                 body_dxdt[k,t] * nhat_x[t] + body_dydt[k,t] * nhat_y[t]
             ) * L[t] * (np.pi / Nb) * np.sin(k * np.pi / Nb)
     

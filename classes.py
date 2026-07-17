@@ -46,36 +46,34 @@ class BoundSheet:
         self.tangent_x = np.zeros(params.Nt)
         self.tangent_y = np.zeros(params.Nt)
 
-        L = np.zeros(params.Nt)
+        self.L = np.zeros(params.Nt)
         c = np.zeros(params.Nt)
         theta = np.zeros(params.Nt)
 
-        dLdt = np.zeros(params.Nt)
+        self.dLdt = np.zeros(params.Nt)
         dcdt = np.zeros(params.Nt)
         dthetadt = np.zeros(params.Nt)
 
         for t in range(params.Nt):
-            L[t] = 1 + 0.5 * length_amp * (1 + np.cos(2 * np.pi * frequency * t * params.dt + length_phase))
-            c[t] = heaving_amp * np.cos(2 * np.pi * frequency * t * params.dt + heaving_phase)
-            theta[t] = pitching_amp * np.cos(2 * np.pi * frequency * t * params.dt + pitching_phase)
+            self.L[t] = 1 + 0.5 * length_amp * np.sin(2 * 2 * np.pi * frequency * t * params.dt + length_phase)
+            c[t] = heaving_amp * np.sin(2 * np.pi * frequency * t * params.dt + heaving_phase)
+            theta[t] = pitching_amp * np.sin(2 * np.pi * frequency * t * params.dt + pitching_phase)
 
-            dLdt[t] = -0.5 * length_amp * 2 * np.pi * frequency * np.sin(2 * np.pi * frequency * params.dt * t + length_phase)
-            dcdt[t] = -heaving_amp * 2 * np.pi * frequency * np.sin(2 * np.pi * frequency * t * params.dt + heaving_phase)
-            dthetadt[t] = -pitching_amp * 2 * np.pi * frequency * np.sin(2 * np.pi * frequency * t * params.dt + pitching_phase)
+            self.dLdt[t] = 0.5 * length_amp * 2 * 2 * np.pi * frequency * np.cos(2 * 2 * np.pi * frequency * params.dt * t + length_phase)
+            dcdt[t] = heaving_amp * 2 * np.pi * frequency * np.cos(2 * np.pi * frequency * t * params.dt + heaving_phase)
+            dthetadt[t] = pitching_amp * 2 * np.pi * frequency * np.cos(2 * np.pi * frequency * t * params.dt + pitching_phase)
 
         for t in range(params.Nt):
             for k in range(params.Nb+1):
-                self.x_chebyshev[k, t] = L[t] * (self.alpha_chebyshev[k] - pivot_loc) * np.cos(theta[t]) + params.dt * t * params.u
-                self.y_chebyshev[k, t] = c[t] + L[t] * (self.alpha_chebyshev[k] - pivot_loc) * np.sin(theta[t])
-                self.dxdt_chebyshev[k, t] = dLdt[t] * (self.alpha_chebyshev[k] - pivot_loc) * np.cos(theta[t]) + L[t] * (self.alpha_chebyshev[k] - pivot_loc) * -np.sin(theta[t]) * dthetadt[t] + params.u
-                self.dydt_chebyshev[k, t] = dcdt[t] + dLdt[t] * (self.alpha_chebyshev[k] - pivot_loc) * np.sin(theta[t]) + L[t] * (self.alpha_chebyshev[k] - pivot_loc) *np.cos(theta[t]) * dthetadt[t]
-            self.dsdalpha[t] = L[t] # dsdalpha only varies in time with this setup
-
+                self.x_chebyshev[k, t] = self.L[t] * (self.alpha_chebyshev[k] - pivot_loc) * np.cos(theta[t]) + params.dt * t * params.u
+                self.y_chebyshev[k, t] = c[t] + self.L[t] * (self.alpha_chebyshev[k] - pivot_loc) * np.sin(theta[t])
+                self.dxdt_chebyshev[k, t] = self.dLdt[t] * (self.alpha_chebyshev[k] - pivot_loc) * np.cos(theta[t]) + self.L[t] * (self.alpha_chebyshev[k] - pivot_loc) * -np.sin(theta[t]) * dthetadt[t] + params.u
+                self.dydt_chebyshev[k, t] = dcdt[t] + self.dLdt[t] * (self.alpha_chebyshev[k] - pivot_loc) * np.sin(theta[t]) + self.L[t] * (self.alpha_chebyshev[k] - pivot_loc) *np.cos(theta[t]) * dthetadt[t]
             for l in range(params.Nb):
-                self.x_collocation[l, t] = L[t] * (self.alpha_collocation[l] - pivot_loc) * np.cos(theta[t]) + params.dt * t * params.u
-                self.y_collocation[l, t] = c[t] + L[t] * (self.alpha_collocation[l] - pivot_loc) * np.sin(theta[t])
-                self.dxdt_collocation[l, t] = dLdt[t] * (self.alpha_collocation[l] - pivot_loc) * np.cos(theta[t]) + L[t] * (self.alpha_collocation[l] - pivot_loc) * -np.sin(theta[t]) * dthetadt[t] + params.u
-                self.dydt_collocation[l, t] = dcdt[t] + dLdt[t] * (self.alpha_collocation[l] - pivot_loc) * np.sin(theta[t]) + L[t] * (self.alpha_collocation[l] - pivot_loc) *np.cos(theta[t]) * dthetadt[t]
+                self.x_collocation[l, t] = self.L[t] * (self.alpha_collocation[l] - pivot_loc) * np.cos(theta[t]) + params.dt * t * params.u
+                self.y_collocation[l, t] = c[t] + self.L[t] * (self.alpha_collocation[l] - pivot_loc) * np.sin(theta[t])
+                self.dxdt_collocation[l, t] = self.dLdt[t] * (self.alpha_collocation[l] - pivot_loc) * np.cos(theta[t]) + self.L[t] * (self.alpha_collocation[l] - pivot_loc) * -np.sin(theta[t]) * dthetadt[t] + params.u
+                self.dydt_collocation[l, t] = dcdt[t] + self.dLdt[t] * (self.alpha_collocation[l] - pivot_loc) * np.sin(theta[t]) + self.L[t] * (self.alpha_collocation[l] - pivot_loc) *np.cos(theta[t]) * dthetadt[t]
 
         self.normal_x = -np.sin(theta)
         self.normal_y = np.cos(theta)
