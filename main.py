@@ -166,43 +166,45 @@ def main():
         frequency
     '''
 
-    params.enable_animation = False
-    run_sweep = True
+    params.enable_animation = True
+    run_sweep = False
     run_optimizer = False
 
     '''
         Temp code to get some animations
     '''
 
-    '''
-    freq = 0.3
+    
+    freq = 0.4
     t_cutoff = 2 / freq
     #params.T = 1 * t_cutoff
-    params.T = 2*t_cutoff
+    params.T = 3*t_cutoff
     params.Nt = int(params.T/params.dt) + 1
     body,sheet = run_sim(
         0.1,
-        3.0*np.pi/2.0,
-        15 * np.pi / 180,
         0,
-        -0.5,
-        4.0*np.pi/2.0,
+        np.pi / 9,
+        3*np.pi/2,
+        1.1,
+        np.pi/2,
         1,
         freq
     )
     time = np.linspace(0,params.T,params.Nt)
+    functions.plot_time_dependent_quantity(time,body.force_x,'thrust')
+    functions.plot_time_dependent_quantity(time,body.power_in,'power input')
     start_index = np.searchsorted(time, t_cutoff, side='right')
 
     time_steady = time[start_index:]
     force_x_steady = body.force_x[start_index:]
     power_steady = body.power_in[start_index:]
 
-    avg_thrust_steady = functions.compute_time_average(time_steady, force_x_steady)
+    avg_thrust_steady = functions.compute_time_average(time_steady, np.maximum(0,force_x_steady))
 
-    avg_power_steady = functions.compute_time_average(time_steady, np.max(np.zeros_like(power_steady), power_steady))
+    avg_power_steady = functions.compute_time_average(time_steady, np.maximum(0, power_steady))
 
     print(f"Efficiency = {avg_thrust_steady * params.u / avg_power_steady}")
-    '''
+    
     
     if run_sweep == True:
         t_cutoff = 2 / 0.4
@@ -221,7 +223,7 @@ def main():
 
         for phi_index in range(np.size(phi_params)):
             for length_index in range(np.size(length_params)):
-                print(f"--- Running with phi = {phi_params[phi_index]/np.pi}pi, frequency = {length_params[length_index]}")
+                print(f"--- Running with phi = {phi_params[phi_index]/np.pi}pi, L0 = {length_params[length_index]}")
                 #t_cutoff = 2 / frequency_params[frequency_index]
                 #params.T = 5 * t_cutoff
                 #params.Nt = int(params.T/params.dt) + 1

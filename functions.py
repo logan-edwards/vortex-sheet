@@ -362,11 +362,7 @@ def compute_forces(nhat_x,
         for k in range(1, Nb-1):
             Fx[t] = Fx[t] - nhat_x[t] * L[t] * (np.pi / Nb) * pressures[k,t] * np.sin(np.pi * k / Nb)
             Fy[t] = Fy[t] - nhat_y[t] * L[t] * (np.pi / Nb) * pressures[k,t] * np.sin(np.pi * k / Nb)
-        
-        ''' 
-            Check against Shelley and Alben: does leading_edge_sigma depend on 
-            s or alpha, i.e. does it have a length factor? 
-        '''
+
         suction_x = tan_x[t] * (np.pi / 8) * (leading_edge_sigmas[t] / L[t])**2 # does this need to scale by 1/length?
         suction_y = tan_y[t] * (np.pi / 8) * (leading_edge_sigmas[t] / L[t])**2 # does this need to scale by 1/length?
 
