@@ -43,6 +43,7 @@ def compute_bound_sheet(nhat_x,
                         free_sheet_x,
                         free_sheet_y,
                         free_sheet_circulation,
+                        L,
                         delta
                         ):
     Nb = np.size(body_x_cheb) - 1
@@ -106,7 +107,7 @@ def compute_bound_sheet(nhat_x,
     for l in prange(Nb):
         for k in range(Nb+1):
             if(k==0 or k==Nb):
-                A[l,k] = (np.pi/(2*Nb)) * K_delta_normal(
+                A[l,k] = L * (np.pi/(2*Nb)) * K_delta_normal(
                     body_x_coll[l] - body_x_cheb[k], 
                     body_y_coll[l] - body_y_cheb[k], 
                     nhat_x, 
@@ -114,7 +115,7 @@ def compute_bound_sheet(nhat_x,
                     0
                     )
             else:
-                A[l,k] = (np.pi/Nb) * K_delta_normal(
+                A[l,k] = L * (np.pi/Nb) * K_delta_normal(
                     body_x_coll[l] - body_x_cheb[k], 
                     body_y_coll[l] - body_y_cheb[k], 
                     nhat_x, 
@@ -145,10 +146,10 @@ def compute_bound_sheet(nhat_x,
     '''
         Enforce KCT:
     '''
-    A[Nb+1, 0] = np.pi/(2*Nb)
-    A[Nb+1, Nb] = np.pi/(2*Nb)
+    A[Nb+1, 0] = L * np.pi/(2*Nb)
+    A[Nb+1, Nb] = L * np.pi/(2*Nb)
     for k in range (1,Nb):
-        A[Nb+1, k] = np.pi/Nb
+        A[Nb+1, k] = L * np.pi/Nb
     A[Nb+1, Nb+1] = 1.0
 
     '''
@@ -168,6 +169,7 @@ def compute_sheet_velocity(free_sheet_x,
                            body_y_cheb,
                            free_sheet_circulation,
                            sigma,
+                           dsdalpha,
                            delta,
                            ):
     Nb = np.size(body_x_cheb)
@@ -213,8 +215,8 @@ def compute_sheet_velocity(free_sheet_x,
             else:
                 u_bound[i] = u_bound[i] + (np.pi / Nb) * sigma[k] * u1
                 v_bound[i] = v_bound[i] + (np.pi / Nb) * sigma[k] * v1
-    u_bound = u_bound
-    v_bound = v_bound
+    u_bound = u_bound * dsdalpha
+    v_bound = v_bound * dsdalpha
 
     return u_bound + u_free, v_bound + v_free
 
@@ -286,11 +288,20 @@ def compute_pressure_distribution(tan_x,
                             0
                             )
             if(k == 0 or k == Nb):
-                I_coll_x[l] = I_coll_x[l] + (np.pi/(2*Nb)) * sigma[k] * Ix
-                I_coll_y[l] = I_coll_y[l] + (np.pi/(2*Nb)) * sigma[k] * Iy
+                '''
+                    Check that this is proper, but I think it's fine.
+                    We need to scale by L in the bound sheet integral,
+                    go through the reconstruction to make sure it's good but I
+                    believe that since this reconstruction process will reconstruct
+                    the black box function it is fine to scale by dsdalpha here
+                    instead of in the final integral; actually I think this is probably
+                    the desirable place to do so.
+                '''
+                I_coll_x[l] = I_coll_x[l] + (np.pi/(2*Nb)) * sigma[k] * L * Ix
+                I_coll_y[l] = I_coll_y[l] + (np.pi/(2*Nb)) * sigma[k] * L * Iy
             else:
-                I_coll_x[l] = I_coll_x[l] + (np.pi/Nb) * sigma[k] * Ix
-                I_coll_y[l] = I_coll_y[l] + (np.pi/Nb) * sigma[k] * Iy
+                I_coll_x[l] = I_coll_x[l] + (np.pi/Nb) * sigma[k] * L * Ix
+                I_coll_y[l] = I_coll_y[l] + (np.pi/Nb) * sigma[k] * L * Iy
     for j in prange(Nb):
         for l in range(Nb):
             X_x[j] = X_x[j] + 2 * I_coll_x[l] * np.cos(j*np.pi*(2*l+1)/(2*Nb))
@@ -327,7 +338,7 @@ def compute_pressure_distribution(tan_x,
     tau = tan_x * body_dxdt_cheb + tan_y * body_dydt_cheb
     
     for k in range(1, Nb):
-        gamma[k] = sigma[k] / (L * np.sin(k*np.pi/Nb))
+        gamma[k] = sigma[k] / np.sin(k*np.pi/Nb)
     
     for k in range(1, Nb + 1):
         I_dsigmadt[k] = I_dsigmadt[k-1] + (np.pi / (2*Nb)) * (
@@ -363,8 +374,8 @@ def compute_forces(nhat_x,
             Fx[t] = Fx[t] - nhat_x[t] * L[t] * (np.pi / Nb) * pressures[k,t] * np.sin(np.pi * k / Nb)
             Fy[t] = Fy[t] - nhat_y[t] * L[t] * (np.pi / Nb) * pressures[k,t] * np.sin(np.pi * k / Nb)
 
-        suction_x = tan_x[t] * (np.pi / 8) * (leading_edge_sigmas[t] / L[t])**2 # does this need to scale by 1/length?
-        suction_y = tan_y[t] * (np.pi / 8) * (leading_edge_sigmas[t] / L[t])**2 # does this need to scale by 1/length?
+        suction_x = tan_x[t] * (np.pi / 8) * (leading_edge_sigmas[t])**2
+        suction_y = tan_y[t] * (np.pi / 8) * (leading_edge_sigmas[t])**2
 
         Fx[t] = Fx[t] + suction_x
         Fy[t] = Fy[t] + suction_y
@@ -385,8 +396,8 @@ def compute_power_in(nhat_x,
     P = np.zeros(Nt)
 
     for t in prange(Nt):
-        for k in range(1, Nb):
-            P[t] = P[t] + pressures[k,t] * (
+        for k in range(1, Nb-1):
+            P[t] = P[t] - pressures[k,t] * (
                 body_dxdt[k,t] * nhat_x[t] + body_dydt[k,t] * nhat_y[t]
             ) * L[t] * (np.pi / Nb) * np.sin(k * np.pi / Nb)
     

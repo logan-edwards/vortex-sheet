@@ -8,7 +8,7 @@ Nb = 100
 delta = 0.2
 
 T = 5
-dt = 0.01
+dt = 0.05
 Nt = int(T/dt) + 1
 
 eps_shed = 1e-12

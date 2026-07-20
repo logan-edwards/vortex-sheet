@@ -59,6 +59,7 @@ def run_sim(
             free_sheet.x,
             free_sheet.y,
             free_sheet.circulation,
+            body.L[timestep],
             params.delta
         )
         body.sigmas[:,timestep] = x[0:params.Nb+1]
@@ -82,6 +83,7 @@ def run_sim(
                                          body.y_chebyshev[:,timestep],
                                          free_sheet.circulation,
                                          body.sigmas[:,timestep],
+                                         body.L[timestep],
                                          params.delta
                                          )
         
@@ -166,49 +168,61 @@ def main():
         frequency
     '''
 
-    params.enable_animation = True
+    params.enable_animation = False
     run_sweep = False
     run_optimizer = False
+    run_single_sim = True
 
     '''
         Temp code to get some animations
     '''
 
+    '''
+        Consider efficiency by 3 metrics:
+            1. <P_{in}>
+            2. <max(0,P_{in})>
+            3. <P_{in}>
+    '''
+
+    if run_single_sim == True:
+        freq = 0.2
+        t_cutoff = 2 / freq
+        #params.T = 1 * t_cutoff
+        params.T = 2 * t_cutoff
+        #params.T = 3*t_cutoff
+        params.Nt = int(params.T/params.dt) + 1
+        body,sheet = run_sim(
+            0.1,
+            0,
+            np.pi / 9,
+            270 * np.pi / 180,
+            0.5,
+            45 * np.pi / 180,
+            1,
+            freq
+        )
+        time = np.linspace(0,params.T,params.Nt)
+        functions.plot_time_dependent_quantity(time,body.force_x,'thrust')
+        functions.plot_time_dependent_quantity(time,body.power_in,'power input')
+        start_index = np.searchsorted(time, t_cutoff, side='right')
+
+        time_steady = time[start_index:]
+        force_x_steady = body.force_x[start_index:]
+        power_steady = body.power_in[start_index:]
+
+        avg_thrust_steady = np.maximum(0,functions.compute_time_average(time_steady, force_x_steady))
+
+        avg_power_steady = np.abs(functions.compute_time_average(time_steady, power_steady))
+
+        avg_sigma = functions.compute_time_average(time_steady, np.abs(body.sigmas[params.Nb,start_index:]))
+
+        print(f"Efficiency = {avg_thrust_steady * params.u / avg_power_steady}")
+        print(f"Leading Edge Sigma (avg) = {avg_sigma}")
     
-    freq = 0.4
-    t_cutoff = 2 / freq
-    #params.T = 1 * t_cutoff
-    params.T = 3*t_cutoff
-    params.Nt = int(params.T/params.dt) + 1
-    body,sheet = run_sim(
-        0.1,
-        0,
-        np.pi / 9,
-        3*np.pi/2,
-        1.1,
-        np.pi/2,
-        1,
-        freq
-    )
-    time = np.linspace(0,params.T,params.Nt)
-    functions.plot_time_dependent_quantity(time,body.force_x,'thrust')
-    functions.plot_time_dependent_quantity(time,body.power_in,'power input')
-    start_index = np.searchsorted(time, t_cutoff, side='right')
-
-    time_steady = time[start_index:]
-    force_x_steady = body.force_x[start_index:]
-    power_steady = body.power_in[start_index:]
-
-    avg_thrust_steady = functions.compute_time_average(time_steady, np.maximum(0,force_x_steady))
-
-    avg_power_steady = functions.compute_time_average(time_steady, np.maximum(0, power_steady))
-
-    print(f"Efficiency = {avg_thrust_steady * params.u / avg_power_steady}")
-    
-    
+    params.enable_animation = False
     if run_sweep == True:
-        t_cutoff = 2 / 0.4
-        params.T = 3 * t_cutoff
+        t_cutoff = 2 / 0.2
+        params.T = 4 * t_cutoff
         params.Nt = int(params.T/params.dt) + 1
 
         phi_params = np.linspace(0, 2*np.pi, 36)
@@ -235,7 +249,7 @@ def main():
                     length_params[length_index],
                     phi_params[phi_index],
                     1,
-                    0.4
+                    0.2
                 )
                 time = np.linspace(0,params.T,params.Nt)
                 start_index = np.searchsorted(time, t_cutoff, side='right')
@@ -243,14 +257,13 @@ def main():
                 time_steady = time[start_index:]
                 force_x_steady = body.force_x[start_index:]
                 power_steady = body.power_in[start_index:]
+                sigma_steady = np.abs(body.sigmas[params.Nb,start_index:])
 
-                avg_thrust_steady = functions.compute_time_average(time_steady,
-                                                                force_x_steady
-                                                                )
+                avg_thrust_steady = np.maximum(0, functions.compute_time_average(time_steady,force_x_steady))
 
-                avg_power_steady = functions.compute_time_average(time_steady,
-                                                                np.maximum(0,power_steady)
-                )
+                avg_power_steady = functions.compute_time_average(time_steady,np.abs(power_steady))
+
+                avg_sigma = functions.compute_time_average(time_steady,sigma_steady)
 
                 print(f"Efficiency = {avg_thrust_steady * params.u / avg_power_steady}")
 
@@ -276,7 +289,7 @@ def main():
                     avg_thrust_steady = 0
 
                 saved_efficiencies[phi_index, length_index] = avg_thrust_steady * params.u / avg_power_steady
-                saved_LES[phi_index, length_index] = np.max(np.abs(body.sigmas[params.Nb,start_index:]))
+                saved_LES[phi_index, length_index] = avg_sigma
                 saved_thrust[phi_index, length_index] = avg_thrust_steady
                 saved_power[phi_index, length_index] = avg_power_steady
 
@@ -291,7 +304,7 @@ def main():
             phi_params,
             length_params,
             np.transpose(saved_LES),
-            'Leading Edge Sigma'
+            'Leading Edge Sigma (avg)'
         )
 
         functions.plot_polar(
