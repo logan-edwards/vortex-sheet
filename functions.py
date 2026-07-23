@@ -401,7 +401,8 @@ def compute_power_in(nhat_x,
                 body_dxdt[k,t] * nhat_x[t] + body_dydt[k,t] * nhat_y[t]
             ) * L[t] * (np.pi / Nb) * np.sin(k * np.pi / Nb)
     
-    return P
+    # not sure why P has the convention that it is negative? returning -P just flips the integral sign...
+    return -P
 
 @njit
 def compute_time_average(time, quantity):
@@ -491,6 +492,30 @@ def plot_polar(angle, radius, quantity, label):
 
     cbar = fig.colorbar(pcm, ax=ax, pad=0.1)
     cbar.set_label(label)
+
+    ax.set_rlim(radius.min(), radius.max())
+    ax.set_thetalim(angle.min(), angle.max())
+
+    ax.set_title(label, va="bottom")
+    ax.grid(True)
+
+    plt.show()
+
+def plot_polar_rawdata(angle, radius, quantity, label):
+    # 1. Generate sample data (theta in radians, r as radius)
+    # 2. Create figure and polar axis
+
+    theta_grid, r_grid = np.meshgrid(angle, radius)
+
+    fig, ax = plt.subplots(subplot_kw={'projection': 'polar'})
+
+    pcm = ax.pcolormesh(theta_grid, r_grid, quantity, shading="nearest", cmap="viridis")
+
+    cbar = fig.colorbar(pcm, ax=ax, pad=0.1)
+    cbar.set_label(label)
+
+    ax.set_rlim(radius.min(), radius.max())
+    ax.set_thetalim(angle.min(), angle.max())
 
     ax.set_title(label, va="bottom")
     ax.grid(True)

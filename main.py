@@ -169,19 +169,13 @@ def main():
     '''
 
     params.enable_animation = False
-    run_sweep = False
-    run_optimizer = False
-    run_single_sim = True
+    run_single_sim = False
+    run_freq_sweep = False
+    run_length_sweep = False
+    run_alpha_sweep = True
 
     '''
         Temp code to get some animations
-    '''
-
-    '''
-        Consider efficiency by 3 metrics:
-            1. <P_{in}>
-            2. <max(0,P_{in})>
-            3. <P_{in}>
     '''
 
     if run_single_sim == True:
@@ -210,163 +204,317 @@ def main():
         force_x_steady = body.force_x[start_index:]
         power_steady = body.power_in[start_index:]
 
-        avg_thrust_steady = np.maximum(0,functions.compute_time_average(time_steady, force_x_steady))
+        avg_thrust_steady = functions.compute_time_average(time_steady, force_x_steady)
 
-        avg_power_steady = np.abs(functions.compute_time_average(time_steady, power_steady))
+        avg_power_steady = functions.compute_time_average(time_steady, power_steady)
 
         avg_sigma = functions.compute_time_average(time_steady, np.abs(body.sigmas[params.Nb,start_index:]))
 
         print(f"Efficiency = {avg_thrust_steady * params.u / avg_power_steady}")
         print(f"Leading Edge Sigma (avg) = {avg_sigma}")
-    
-    params.enable_animation = False
-    if run_sweep == True:
-        t_cutoff = 2 / 0.2
-        params.T = 4 * t_cutoff
-        params.Nt = int(params.T/params.dt) + 1
 
-        phi_params = np.linspace(0, 2*np.pi, 36)
-        #frequency_params = np.linspace(0.2, 0.8, 8)
-        length_params = np.linspace(0,1.5,4)
+    if run_freq_sweep == True:
+        '''
+            Tweak these parameters to effect sampling size and fixed parameters
+        '''
+        frequency_samples = 8
+        phase_samples = 12
+        trial_name = 'Trial000'
+        
+        c0 = 0.125
+        theta0 = 15.0 * np.pi / 180.0
+        phi_theta = 270.0 * np.pi / 180.0
+        pivot = 1.0
+        L0 = 1.5
 
-        saved_efficiencies = np.zeros((np.size(phi_params), np.size(length_params)))
-        saved_LES = np.zeros((np.size(phi_params),np.size(length_params)))
-        saved_thrust = np.zeros((np.size(phi_params),np.size(length_params)))
-        saved_power = np.zeros((np.size(phi_params),np.size(length_params)))
-        saved_St = np.zeros((np.size(phi_params),np.size(length_params)))
 
-        for phi_index in range(np.size(phi_params)):
-            for length_index in range(np.size(length_params)):
-                print(f"--- Running with phi = {phi_params[phi_index]/np.pi}pi, L0 = {length_params[length_index]}")
-                #t_cutoff = 2 / frequency_params[frequency_index]
-                #params.T = 5 * t_cutoff
-                #params.Nt = int(params.T/params.dt) + 1
-                body,free = run_sim(
-                    0.1,
-                    0.0,
-                    np.pi / 9.0,
-                    270.0 * np.pi / 180.0,
-                    length_params[length_index],
-                    phi_params[phi_index],
-                    1,
-                    0.2
+        '''
+            Parameters determined by sampled data
+        '''
+        reduced_freq = np.linspace(0.2, 0.8, frequency_samples)
+        phase_angle = np.linspace(30*np.pi/180, 120*np.pi/180, phase_samples)
+
+        saved_thrust = np.zeros((frequency_samples, phase_samples))
+        saved_power = np.zeros((frequency_samples, phase_samples))
+        saved_LES = np.zeros((frequency_samples, phase_samples))
+        saved_efficiency = np.zeros((frequency_samples, phase_samples))
+        saved_St = np.zeros((frequency_samples, phase_samples))
+
+        for i in range(frequency_samples):
+            for j in range(phase_samples):
+                '''
+                    Calculate frequency from reduced frequency,
+                    then set up appropriate cutoff times and total sim times
+                '''
+                frequency = params.u * reduced_freq[i] / 2.0
+                t_cutoff = 2.0 / frequency
+                params.T = 2 * t_cutoff
+                params.Nt = int(params.T/params.dt) + 1
+                body,sheet = run_sim(
+                    c0,
+                    0,
+                    theta0,
+                    phi_theta,
+                    L0,
+                    phase_angle[j],
+                    pivot,
+                    frequency
                 )
                 time = np.linspace(0,params.T,params.Nt)
                 start_index = np.searchsorted(time, t_cutoff, side='right')
 
-                time_steady = time[start_index:]
-                force_x_steady = body.force_x[start_index:]
-                power_steady = body.power_in[start_index:]
-                sigma_steady = np.abs(body.sigmas[params.Nb,start_index:])
+                avg_thrust_steady = functions.compute_time_average(time[start_index:], body.force_x[start_index:])
+                avg_power_steady = functions.compute_time_average(time[start_index:], body.power_in[start_index:])
+                efficiency = avg_thrust_steady * params.u / avg_power_steady
+                avg_sigma = functions.compute_time_average(time[start_index:], np.abs(body.sigmas[params.Nb,start_index:]))
+                St = 2 * frequency * (c0 + 2.0 * theta0) / params.u
 
-                avg_thrust_steady = np.maximum(0, functions.compute_time_average(time_steady,force_x_steady))
+                saved_thrust[i,j] = avg_thrust_steady
+                saved_power[i,j] = avg_power_steady
+                saved_efficiency[i,j] = efficiency
+                saved_LES[i,j] = avg_sigma
+                saved_St[i,j] = St
 
-                avg_power_steady = functions.compute_time_average(time_steady,np.abs(power_steady))
-
-                avg_sigma = functions.compute_time_average(time_steady,sigma_steady)
-
-                print(f"Efficiency = {avg_thrust_steady * params.u / avg_power_steady}")
+                print(f"Efficiency = {efficiency}")
+                print(f"St = {St}")
+                print(f"Leading Edge Sigma (avg) = {avg_sigma}")
 
                 functions.write_report([
-                    phi_params[phi_index],
-                    length_params[length_index],
+                    phase_angle[j],
+                    reduced_freq[i],
                     avg_thrust_steady,
                     avg_power_steady,
-                    np.abs(avg_thrust_steady) * params.u / np.abs(avg_power_steady),
-                    np.max(np.abs(body.sigmas[params.Nb,start_index:]))
-                ],
-                [
-                    'phi',
-                    'L0',
-                    'thrust',
-                    'power',
-                    'efficiency',
-                    'LE sigma magnitude'
-                ],
-                'new_param_sweep.csv')
+                    efficiency,
+                    avg_sigma,
+                    St
+                    ],
+                    [
+                        'phase angle (phi_L)',
+                        'reduced frequency f*',
+                        '<thrust>',
+                        '<power,input>',
+                        'efficiency',
+                        '<|LES|>',
+                        'Strouhal Number (St)'
+                    ],
+                    trial_name+'.csv'
+                )
 
-                if(avg_thrust_steady < 0):
-                    avg_thrust_steady = 0
+        '''
+        functions.plot_polar(phase_angle, reduced_freq, saved_thrust, 'Thrust')
+        functions.plot_polar(phase_angle, reduced_freq, saved_power, 'Input Power')
+        functions.plot_polar(phase_angle, reduced_freq, saved_efficiency, 'Froude Efficiency')
+        functions.plot_polar(phase_angle, reduced_freq, saved_LES, 'Average |LES|')
+        functions.plot_polar(phase_angle, reduced_freq, saved_St, 'Strouhal Number (St)')
+        '''
 
-                saved_efficiencies[phi_index, length_index] = avg_thrust_steady * params.u / avg_power_steady
-                saved_LES[phi_index, length_index] = avg_sigma
-                saved_thrust[phi_index, length_index] = avg_thrust_steady
-                saved_power[phi_index, length_index] = avg_power_steady
-
-        functions.plot_polar(
-            phi_params,
-            length_params,
-            np.transpose(saved_efficiencies),
-            'Efficiency'
-        )
-
-        functions.plot_polar(
-            phi_params,
-            length_params,
-            np.transpose(saved_LES),
-            'Leading Edge Sigma (avg)'
-        )
-
-        functions.plot_polar(
-            phi_params,
-            length_params,
-            np.transpose(saved_thrust),
-            'Thrust'
-        )
-
-        functions.plot_polar(
-            phi_params,
-            length_params,
-            np.transpose(saved_power),
-            'Power'
-        )
+        functions.plot_polar_rawdata(phase_angle, reduced_freq, saved_thrust, 'Thrust')
+        functions.plot_polar_rawdata(phase_angle, reduced_freq, saved_power, 'Input Power')
+        functions.plot_polar_rawdata(phase_angle, reduced_freq, saved_efficiency, 'Froude Efficiency')
+        functions.plot_polar_rawdata(phase_angle, reduced_freq, saved_LES, 'Average |LES|')
+        functions.plot_polar_rawdata(phase_angle, reduced_freq, saved_St, 'Strouhal Number (St)')
     
-    if run_optimizer == True:
-        params.sim_start_time = time_ns()
-        initial_guess = np.zeros(6)
-        # heaving amplitude, phase
-        initial_guess[0] = 0.1
-        initial_guess[1] = 0
-        # pitching amplitude, phase
-        initial_guess[2] = np.pi / 9.0
-        initial_guess[3] = 3.0 * np.pi / 2.0
-        # lengthening %, phase
-        initial_guess[4] = -0.5
-        initial_guess[5] = np.pi
-        # pivot location
-        #initial_guess[6] = 1.0
-        result = minimize(
-            optimizer.objective,
-            initial_guess,
-            method='L-BFGS-B',
-            jac='cs',
-            bounds=[
-                (0,1),
-                (0,2*np.pi),
-                (0,np.pi/4),
-                (0,2*np.pi),
-                (-0.95,0.95),
-                (0,2*np.pi),
-            ],
-            tol=1e-6,
-            options={
-                'maxiter': 500
-            }
-        )
-        print(f"Success status = {result.success} in iterations {result.nfev}, message = {result.message}")
-        print(f"Gradient at optimal solution = {result.jac}")
-        print(f"Optimal efficiency (WITH PENALTY) = {-result.fun}")
-        print(f"Obtained with parameter set: {result.x}")
+    if run_length_sweep == True:
+        '''
+            Tweak these parameters to effect sampling size and fixed parameters
+        '''
+        length_samples = 9
+        phase_samples = 12
+        trial_name = 'Trial_f000'
+        
+        c0 = 0.125
+        theta0 = 15.0 * np.pi / 180.0
+        phi_theta = 270.0 * np.pi / 180.0
+        pivot = 1.0
+        reduced_freq = 0.2
 
-    
-    
+        '''
+            Parameters determined by sampled data
+        '''
+        lengths = np.linspace(0, 1.8, length_samples)
+        phase_angle = np.linspace(30*np.pi/180, 120*np.pi/180, phase_samples)
+
+        saved_thrust = np.zeros((length_samples, phase_samples))
+        saved_power = np.zeros((length_samples, phase_samples))
+        saved_LES = np.zeros((length_samples, phase_samples))
+        saved_efficiency = np.zeros((length_samples, phase_samples))
+        saved_St = np.zeros((length_samples, phase_samples))
+
+        for i in range(length_samples):
+            for j in range(phase_samples):
+                '''
+                    Calculate frequency from reduced frequency,
+                    then set up appropriate cutoff times and total sim times
+                '''
+                frequency = params.u * reduced_freq / 2.0
+                t_cutoff = 2.0 / frequency
+                params.T = 2 * t_cutoff
+                params.Nt = int(params.T/params.dt) + 1
+                body,sheet = run_sim(
+                    c0,
+                    0,
+                    theta0,
+                    phi_theta,
+                    lengths[i],
+                    phase_angle[j],
+                    pivot,
+                    frequency
+                )
+                time = np.linspace(0,params.T,params.Nt)
+                start_index = np.searchsorted(time, t_cutoff, side='right')
+
+                avg_thrust_steady = functions.compute_time_average(time[start_index:], body.force_x[start_index:])
+                avg_power_steady = functions.compute_time_average(time[start_index:], body.power_in[start_index:])
+                efficiency = avg_thrust_steady * params.u / avg_power_steady
+                avg_sigma = functions.compute_time_average(time[start_index:], np.abs(body.sigmas[params.Nb,start_index:]))
+                St = 2 * frequency * (c0 + 2.0 * theta0) / params.u
+
+                saved_thrust[i,j] = avg_thrust_steady
+                saved_power[i,j] = avg_power_steady
+                saved_efficiency[i,j] = efficiency
+                saved_LES[i,j] = avg_sigma
+                saved_St[i,j] = St
+
+                print(f"Efficiency = {efficiency}")
+                print(f"St = {St}")
+                print(f"Leading Edge Sigma (avg) = {avg_sigma}")
+
+                functions.write_report([
+                    phase_angle[j],
+                    lengths[i],
+                    avg_thrust_steady,
+                    avg_power_steady,
+                    efficiency,
+                    avg_sigma,
+                    St
+                    ],
+                    [
+                        'phase angle (phi_L)',
+                        'L0',
+                        '<thrust>',
+                        '<power,input>',
+                        'efficiency',
+                        '<|LES|>',
+                        'Strouhal Number (St)'
+                    ],
+                    trial_name+'.csv'
+                )
+
+        '''
+        functions.plot_polar(phase_angle, reduced_freq, saved_thrust, 'Thrust')
+        functions.plot_polar(phase_angle, reduced_freq, saved_power, 'Input Power')
+        functions.plot_polar(phase_angle, reduced_freq, saved_efficiency, 'Froude Efficiency')
+        functions.plot_polar(phase_angle, reduced_freq, saved_LES, 'Average |LES|')
+        functions.plot_polar(phase_angle, reduced_freq, saved_St, 'Strouhal Number (St)')
+        '''
+
+        functions.plot_polar_rawdata(phase_angle, lengths, saved_thrust, 'Thrust')
+        functions.plot_polar_rawdata(phase_angle, lengths, saved_power, 'Input Power')
+        functions.plot_polar_rawdata(phase_angle, lengths, saved_efficiency, 'Froude Efficiency')
+        functions.plot_polar_rawdata(phase_angle, lengths, saved_LES, 'Average |LES|')
+        functions.plot_polar_rawdata(phase_angle, lengths, saved_St, 'Strouhal Number (St)')
+
+    if run_alpha_sweep == True:
+        '''
+            Tweak these parameters to effect sampling size and fixed parameters
+        '''
+        alpha_samples = 5
+        phase_samples = 16
+        trial_name = 'Trial_alpha000'
+        
+        c0 = 0.125
+        theta0 = 15.0 * np.pi / 180.0
+        phi_theta = 270.0 * np.pi / 180.0
+        pivot = 1.0
+        L0 = 0.5
+        reduced_freq = 0.3
+        phi_L = 75 * np.pi / 180
 
 
-                
-                
-                
+        '''
+            Parameters determined by sampled data
+        '''
+        alpha0 = np.linspace(-1.0, 1.0, alpha_samples)
+        phase_angle = np.linspace(0, 2*np.pi, phase_samples)
 
+        saved_thrust = np.zeros((alpha_samples, phase_samples))
+        saved_power = np.zeros((alpha_samples, phase_samples))
+        saved_LES = np.zeros((alpha_samples, phase_samples))
+        saved_efficiency = np.zeros((alpha_samples, phase_samples))
+        saved_St = np.zeros((alpha_samples, phase_samples))
 
+        for i in range(alpha_samples):
+            for j in range(phase_samples):
+                '''
+                    Calculate frequency from reduced frequency,
+                    then set up appropriate cutoff times and total sim times
+                '''
+                frequency = params.u * reduced_freq / 2.0
+                t_cutoff = 2.0 / frequency
+                params.T = 2 * t_cutoff
+                params.Nt = int(params.T/params.dt) + 1
+                body,sheet = run_sim(
+                    c0,
+                    0,
+                    theta0,
+                    phi_theta,
+                    L0,
+                    phase_angle[j],
+                    alpha0[i],
+                    frequency
+                )
+                time = np.linspace(0,params.T,params.Nt)
+                start_index = np.searchsorted(time, t_cutoff, side='right')
 
- 
+                avg_thrust_steady = functions.compute_time_average(time[start_index:], body.force_x[start_index:])
+                avg_power_steady = functions.compute_time_average(time[start_index:], body.power_in[start_index:])
+                efficiency = avg_thrust_steady * params.u / avg_power_steady
+                avg_sigma = functions.compute_time_average(time[start_index:], np.abs(body.sigmas[params.Nb,start_index:]))
+                St = 2 * frequency * (c0 + (2-alpha0[i])*theta0) / params.u
+
+                saved_thrust[i,j] = avg_thrust_steady
+                saved_power[i,j] = avg_power_steady
+                saved_efficiency[i,j] = efficiency
+                saved_LES[i,j] = avg_sigma
+                saved_St[i,j] = St
+
+                print(f"Efficiency = {efficiency}")
+                print(f"St = {St}")
+                print(f"Leading Edge Sigma (avg) = {avg_sigma}")
+
+                functions.write_report([
+                    phase_angle[j],
+                    alpha0[i],
+                    avg_thrust_steady,
+                    avg_power_steady,
+                    efficiency,
+                    avg_sigma,
+                    St
+                    ],
+                    [
+                        'phase angle (phi_L)',
+                        'pivot loc. alpha0',
+                        '<thrust>',
+                        '<power,input>',
+                        'efficiency',
+                        '<|LES|>',
+                        'Strouhal Number (St)'
+                    ],
+                    trial_name+'.csv'
+                )
+
+        '''
+        functions.plot_polar(phase_angle, reduced_freq, saved_thrust, 'Thrust')
+        functions.plot_polar(phase_angle, reduced_freq, saved_power, 'Input Power')
+        functions.plot_polar(phase_angle, reduced_freq, saved_efficiency, 'Froude Efficiency')
+        functions.plot_polar(phase_angle, reduced_freq, saved_LES, 'Average |LES|')
+        functions.plot_polar(phase_angle, reduced_freq, saved_St, 'Strouhal Number (St)')
+        '''
+
+        functions.plot_polar_rawdata(phase_angle, alpha0, saved_thrust, 'Thrust')
+        functions.plot_polar_rawdata(phase_angle, alpha0, saved_power, 'Input Power')
+        functions.plot_polar_rawdata(phase_angle, alpha0, saved_efficiency, 'Froude Efficiency')
+        functions.plot_polar_rawdata(phase_angle, alpha0, saved_LES, 'Average |LES|')
+        functions.plot_polar_rawdata(phase_angle, alpha0, saved_St, 'Strouhal Number (St)')
+
 main()

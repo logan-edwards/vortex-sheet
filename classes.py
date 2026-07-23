@@ -55,11 +55,12 @@ class BoundSheet:
         dthetadt = np.zeros(params.Nt)
 
         for t in range(params.Nt):
-            self.L[t] = 1 + 0.5 * length_amp * np.sin(2 * 2 * np.pi * frequency * t * params.dt + length_phase)
+            freq_multiplier = 2
+            self.L[t] = 1 + 0.5 * length_amp * np.sin(freq_multiplier * 2 * np.pi * frequency * t * params.dt + length_phase)
             c[t] = heaving_amp * np.sin(2 * np.pi * frequency * t * params.dt + heaving_phase)
             theta[t] = pitching_amp * np.sin(2 * np.pi * frequency * t * params.dt + pitching_phase)
 
-            self.dLdt[t] = 0.5 * length_amp * 2 * 2 * np.pi * frequency * np.cos(2 * 2 * np.pi * frequency * params.dt * t + length_phase)
+            self.dLdt[t] = 0.5 * length_amp * freq_multiplier * 2 * np.pi * frequency * np.cos(freq_multiplier * 2 * np.pi * frequency * params.dt * t + length_phase)
             dcdt[t] = heaving_amp * 2 * np.pi * frequency * np.cos(2 * np.pi * frequency * t * params.dt + heaving_phase)
             dthetadt[t] = pitching_amp * 2 * np.pi * frequency * np.cos(2 * np.pi * frequency * t * params.dt + pitching_phase)
 
