@@ -2,9 +2,11 @@
 Vortex sheet method for modeling the aerodynamics of thin airfoil.
 
 At its core, this code solves the Birkhoff-Rott equation, a singular integro-differential equation given by
+
 $$
 \frac{\partial \overline{z}}{\partial t} = \frac{1}{2\pi i}\int_C \frac{\gamma(s',t)}{z-z(s',t)}\,\mathrm{d}s'
 $$
+
 where $C\subseteq\mathbb{C}$ is the collection of points along the vortex sheet, and the Cauchy principal value of the integral is taken. The combined vortex sheet $C$ consists of the *bound vortex sheet*, $C_b$, which is the boundary layer along the body in the limit of inviscid flow around an infinitely thin plate, and the *free vortex sheet*, $C_f$, which is the wake behind the body. 
 
 The algorithm we utilize is as follows; at each discrete time $t_i$, we:
