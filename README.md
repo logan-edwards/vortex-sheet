@@ -1,4 +1,4 @@
-# vortex_sheet_methods
+# vortex-sheet
 Vortex sheet method for modeling the aerodynamics of thin airfoil.
 
 At its core, this code solves the Birkhoff-Rott equation, a singular integro-differential equation given by
