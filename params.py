@@ -13,7 +13,7 @@ Dependencies: numpy (if np.pi is used to compute values in radians)
 import numpy as np
 
 #               --- SIMULATION PARAMETERS ---
-# body_points:  Number of points to use when discretizing the body; machine
+# Nb:           Number of points to use when discretizing the body; machine
 #               precision is safely reached with a couple hundred points due to
 #               spectral accuracy of the integration method utilized.
 #
@@ -37,7 +37,7 @@ import numpy as np
 #               Nt; keep this in mind as T and dt are balanced.
 #               !!! NT IS A COMPUTED QUANTITY AND SHOULD NOT BE SET MANUALLY !!!
 
-body_points = 200
+Nb = 100
 eps_shed = 1e-12
 delta = 0.2
 
@@ -66,7 +66,7 @@ Nt = int(T/dt)
 #
 # phi_L:        Phase offset of chordwise lengthening, in radians.
 #
-# alpha_0:      Location of the pivot in material coordinates; alpha0 = 1.0
+# alpha0:       Location of the pivot in material coordinates; alpha0 = 1.0
 #               corresponds to the leading edge, while alpha0 = -1.0 corresponds
 #               to the trailing edge.
 #
@@ -82,13 +82,13 @@ Nt = int(T/dt)
 h0 = 0.1
 phi_h = 0.0
 
-theta_0 = np.pi / 9.0
+theta0 = np.pi / 9.0
 phi_theta = 270.0 * np.pi / 360.0
 
 L0 = 0.0
 phi_L = 60.0 * np.pi / 180.0
 
-alpha_0 = 1.0
+alpha0 = 1.0
 U = 1.0
 f = 0.2
 freq_mult = 1
