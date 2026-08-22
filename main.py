@@ -1,11 +1,18 @@
+'''
+main.py
+
+This file implements the simulation.
+
+Dependencies: numpy, time
+'''
+
 import params
 import classes
 import functions
-import optimizer
 
 import numpy as np
-from scipy.optimize import minimize
 from time import time_ns
+
 def run_sim(
     heaving_amplitude,
     heaving_phase,

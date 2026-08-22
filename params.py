@@ -1,8 +1,10 @@
 '''
-    Simulation Parameters
-'''
+params.py
 
-import numpy as np
+This file contains the simulation parameters.
+
+Dependencies: none
+'''
 
 Nb = 100
 delta = 0.2

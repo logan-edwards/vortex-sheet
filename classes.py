@@ -1,5 +1,9 @@
 '''
-    Class Definitions
+classes.py
+
+This file contains the class definitions for the free and bound sheets.
+
+Dependencies: numpy
 '''
 import params
 
