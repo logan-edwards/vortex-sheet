@@ -92,3 +92,9 @@ alpha0 = 1.0
 U = 1.0
 f = 0.2
 freq_mult = 1
+
+ENABLE_ANIMATION = False
+PLOT_THRUST = False
+PLOT_POWER = False
+PLOT_FROUDE_EFF = False
+PLOT_SIGMA_LE = False
