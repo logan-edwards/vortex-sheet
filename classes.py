@@ -27,6 +27,9 @@ class BoundSheet:
         self.z_collocation = np.zeros((params.Nb, params.Nt), dtype=complex)
         self.dzdt_collocation = np.zeros((params.Nb, params.Nt), dtype=complex)
 
+        self.L = np.zeros()
+        self.dLdt = np.zeros()
+
         # Assign the Chebyshev and collocation node spacing
         for k in range(self.Nb + 1):
             self.alpha_chebyshev[k] = -np.cos(k*np.pi/params.Nb)
@@ -42,11 +45,11 @@ class BoundSheet:
             theta = params.theta0 * np.sin(
                 2 * np.pi * params.f * t + params.phi_theta
             )
-            L = 1.0 + (params.L0/2.0) * np.sin(
+            self.L[i] = 1.0 + (params.L0/2.0) * np.sin(
                 2 * np.pi * params.freq_mult * params.f * t + params.phi_L
             )
-            s_cheb = L * (self.alpha_chebyshev[:] - params.alpha0)
-            s_col = L * (self.self.alpha_collocation[:] - params.alpha0)
+            s_cheb = self.L[i] * (self.alpha_chebyshev[:] - params.alpha0)
+            s_col = self.L[i] * (self.self.alpha_collocation[:] - params.alpha0)
 
             self.z_chebyshev[:,i] = s_cheb*np.exp(1j*theta) + 1j*h + params.U*t
             self.z_collocation[:,i] = s_col*np.exp(1j*theta) + 1j*h + params.U*t
@@ -57,17 +60,18 @@ class BoundSheet:
             dthetadt = 2 * np.pi * params.f * params.theta0 * np.cos(
                 2 * np.pi * params.f * t + params.phi_theta
             )
-            dLdt = np.pi * params.freq_mult * params.freq * params.L0 * np.cos(
-                2 * np.pi * params.freq_mult * params.f * t + params.phi_L
+            self.dLdt[i] = np.pi * params.freq_mult * params.freq * params.L0 *(
+                np.cos(2 * np.pi * params.freq_mult * params.f * t + 
+                params.phi_L)
             )
 
             self.dzdt_chebyshev[:,i] = 1j*dhdt + params.U + np.exp(
-                1j*theta) * (dLdt + 1j*L*dthetadt) * (
+                1j*theta) * (self.dLdt[i] + 1j*self.L[i]*dthetadt) * (
                 self.alpha_chebyshev[:] - params.alpha0
             )
 
             self.dzdt_collocation[:,i] = 1j*dhdt + params.U + np.exp(
-                1j*theta) * (dLdt + 1j*L*dthetadt) * (
+                1j*theta) * (self.dLdt[i] + 1j*self.L[i]*dthetadt) * (
                 self.alpha_collocation[:] - params.alpha0
             )
 

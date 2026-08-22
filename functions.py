@@ -38,6 +38,7 @@ compute_time_average:   Computes the time-average given a set of values sampled
 compute_efficiency:     Computes the time-averaged Froude efficiency given an
                         average input power and thrust force.
 
+Dependencies: numpy, numba
 '''
 
 import numpy as np
