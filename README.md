@@ -1,4 +1,4 @@
-#vortex-sheet
+# vortex-sheet
 
 Vortex sheet method for modeling the aerodynamics of thin airfoils.
 
