@@ -1,3 +1,56 @@
+'''
+functions.py
+
+This file contains the functions used in the simulation, as well as functions
+used to plot data and perform animations. These may be separated in a later
+release.
+
+Function list:
+
+K_delta_normal: outputs the dot product of the delta-smoothed Cauchy kernel with
+the normal vector; returns a scalar quantity.
+
+K_delta: outputs the result of the delta-smoothed Cauchy kernel; returns an x
+and y component.
+
+compute_bound_sheet: Computes the sheet suction and free sheet circulation by
+solving the system of equations involving the kinematic boundary condition, the
+Kutta condition, and Kelvin's circulation theorem. Returns a vector of size Nb+2
+containing the sheet suction at the Chebyshev nodes and the free sheet
+circulation.
+
+compute_sheet_velocity: Computes the velocity of the free sheetby evaluating the
+Birkhoff-Rott equation. Returns a vector of x velocities and a vector of y
+velocities.
+
+update_sheet_position: Advances the position of the free sheet using AB2 on all
+applicable points, and Euler's method on the most recently added free sheet
+point. Returns a vector of x positions and a vector of y positions.
+
+compute_pressure_distribution: Computes the pressure jump across the bound
+sheet. Returns a vector of pressures at the Chebyshev nodes.
+
+compute_forces: Computes the net forces acting on the body. Returns an
+x component of force (thrust or drag) and a y component of force (lift or
+downforce).
+
+compute_power_in: Computes the input power required for the body motion. Returns
+a scalar power.
+
+compute_time_average: Computes the time-averaged value of a quantity given a
+set of samples at discete time intervals. Returns a scalar.
+
+animate_motion: Saves an animation of the simulation. Returns nothing.
+
+plot_time_dependent_quantity: Produces a plot of a quantity sampled at discrete
+intervals. Returns nothing. This function is not used in the program by default.
+
+write_report: Writes data to a csv file. Returns nothing. This function is not 
+used in the program by default.
+
+Dependencies: numpy, numba, matplotlib, csv, os
+'''
+
 import numpy as np
 from numba import njit, prange
 
@@ -7,13 +60,14 @@ import matplotlib.animation as animation
 import csv
 import os
 
-
-'''
-    Vortex sheet method functions
-'''
-
 @njit
-def K_delta_normal(dx, dy, nx, ny, delta):
+def K_delta_normal(
+    dx, 
+    dy, 
+    nx, 
+    ny, 
+    delta
+    ):
     denominator = dx**2 + dy**2 + delta**2
     if(denominator < 1e-12):
         return(0)
@@ -32,20 +86,21 @@ def K_delta(dx, dy, delta):
     return u,v
 
 @njit(parallel=True)
-def compute_bound_sheet(nhat_x,
-                        nhat_y,
-                        body_x_cheb,
-                        body_y_cheb,
-                        body_x_coll,
-                        body_y_coll,
-                        body_dxdt_coll,
-                        body_dydt_coll,
-                        free_sheet_x,
-                        free_sheet_y,
-                        free_sheet_circulation,
-                        L,
-                        delta
-                        ):
+def compute_bound_sheet(
+    nhat_x,
+    nhat_y,
+    body_x_cheb,
+    body_y_cheb,
+    body_x_coll,
+    body_y_coll,
+    body_dxdt_coll,
+    body_dydt_coll,
+    free_sheet_x,
+    free_sheet_y,
+    free_sheet_circulation,
+    L,
+    delta
+    ):
     Nb = np.size(body_x_cheb) - 1
     Nf = np.size(free_sheet_circulation)
 
@@ -55,9 +110,7 @@ def compute_bound_sheet(nhat_x,
     A = np.zeros((Nb+2, Nb+2))
     b = np.zeros(Nb+2)
 
-    '''
-    Construct the b vector
-    '''
+    # Construct b vector
     for l in prange(Nb):
         bsum = 0
         bsum = bsum + nhat_x * body_dxdt_coll[l] + nhat_y * body_dydt_coll[l]
@@ -94,16 +147,12 @@ def compute_bound_sheet(nhat_x,
         )
         b[l] = bsum
 
-    '''
-    Construct the A matrix
-        - 0, ..., Nb-1: enforce KBC
-        Nb: Kutta condition
-        Nb+1: Kelvin's circulation theorem
-    '''
+    # Construct the A matrix:
+    # 0, ..., Nb-1: enforce KBC
+    # Nb: enforce Kutta condition
+    # Nb+1: enforce KCT
 
-    '''
-        Enforce KBC:
-    '''
+    # Enforce KBC
     for l in prange(Nb):
         for k in range(Nb+1):
             if(k==0 or k==Nb):
@@ -138,40 +187,36 @@ def compute_bound_sheet(nhat_x,
                 delta
                 )
             )
-    '''
-        Enforce Kutta condition:
-    '''
+    # Enforce Kutta condition
     A[Nb, 0] = 1.0
 
-    '''
-        Enforce KCT:
-    '''
+    # Enforce KCT
     A[Nb+1, 0] = L * np.pi/(2*Nb)
     A[Nb+1, Nb] = L * np.pi/(2*Nb)
     for k in range (1,Nb):
         A[Nb+1, k] = L * np.pi/Nb
     A[Nb+1, Nb+1] = 1.0
 
-    '''
-        Solution is of the form:
-        x = sigma0,
-            sigma1,
-            ...
-            sigmaNb,
-            Gamma^-
-    '''
+
+    # Solution is of the form:
+    #   x=  sigm0,
+    #       ...
+    #       sigmaNb,
+    #       Gamma-
+
     return(np.linalg.solve(A,b))
 
 @njit(parallel=True)
-def compute_sheet_velocity(free_sheet_x,
-                           free_sheet_y,
-                           body_x_cheb,
-                           body_y_cheb,
-                           free_sheet_circulation,
-                           sigma,
-                           dsdalpha,
-                           delta,
-                           ):
+def compute_sheet_velocity(
+    free_sheet_x,
+    free_sheet_y,
+    body_x_cheb,
+    body_y_cheb,
+    free_sheet_circulation,
+    sigma,
+    dsdalpha,
+    delta,
+    ):
     Nb = np.size(body_x_cheb)
     Nf = np.size(free_sheet_circulation)
 
@@ -180,9 +225,7 @@ def compute_sheet_velocity(free_sheet_x,
     v_bound = np.zeros(Nf)
     v_free = np.zeros(Nf)
 
-    '''
-        Integrate over the free sheet
-    '''
+    # Integrate over the free sheet
     for i in prange(Nf):
         for j in range(Nf - 1):
             u1,v1 = K_delta(free_sheet_x[i] - free_sheet_x[j+1],
@@ -201,9 +244,7 @@ def compute_sheet_velocity(free_sheet_x,
     u_free = u_free
     v_free = v_free
 
-    '''
-        Integrate over the bound sheet
-    '''
+    # Integrate over the bound sheet
     for i in prange(Nf):
         for k in range(Nb):
             u1,v1 = K_delta(free_sheet_x[i] - body_x_cheb[k],
@@ -221,44 +262,48 @@ def compute_sheet_velocity(free_sheet_x,
     return u_bound + u_free, v_bound + v_free
 
 @njit(parallel=True)
-def update_sheet_position(free_sheet_x,
-                          free_sheet_y,
-                          free_sheet_dxdt,
-                          free_sheet_dydt,
-                          free_sheet_dxdt_prev,
-                          free_sheet_dydt_prev,
-                          dt
-                          ):
+def update_sheet_position(
+    free_sheet_x,
+    free_sheet_y,
+    free_sheet_dxdt,
+    free_sheet_dydt,
+    free_sheet_dxdt_prev,
+    free_sheet_dydt_prev,
+    dt
+    ):
     Nf = np.size(free_sheet_x)
     x_new = np.zeros(Nf)
     y_new = np.zeros(Nf)
 
     for i in prange(Nf-1):
-        x_new[i] = free_sheet_x[i] + 1.5 * dt * free_sheet_dxdt[i] - 0.5 * dt * free_sheet_dxdt_prev[i]
-        y_new[i] = free_sheet_y[i] + 1.5 * dt * free_sheet_dydt[i] - 0.5 * dt * free_sheet_dydt_prev[i]
+        x_new[i] = free_sheet_x[i] + 1.5 * dt * free_sheet_dxdt[i] - (
+            0.5 * dt * free_sheet_dxdt_prev[i])
+        y_new[i] = free_sheet_y[i] + 1.5 * dt * free_sheet_dydt[i] - (
+            0.5 * dt * free_sheet_dydt_prev[i])
     x_new[Nf-1] = free_sheet_x[Nf-1] + dt * free_sheet_dxdt[Nf-1]
     y_new[Nf-1] = free_sheet_y[Nf-1] + dt * free_sheet_dydt[Nf-1]
     
     return x_new, y_new
 
 @njit(parallel=True)
-def compute_pressure_distribution(tan_x,
-                                  tan_y,
-                                  body_x_coll,
-                                  body_y_coll,
-                                  body_x_cheb,
-                                  body_y_cheb,
-                                  body_dxdt_cheb,
-                                  body_dydt_cheb,
-                                  free_sheet_x,
-                                  free_sheet_y,
-                                  free_sheet_circulation,
-                                  sigma,
-                                  dsigmadt,
-                                  dgammadt,
-                                  L,
-                                  Ldot
-                                  ):
+def compute_pressure_distribution(
+    tan_x,
+    tan_y,
+    body_x_coll,
+    body_y_coll,
+    body_x_cheb,
+    body_y_cheb,
+    body_dxdt_cheb,
+    body_dydt_cheb,
+    free_sheet_x,
+    free_sheet_y,
+    free_sheet_circulation,
+    sigma,
+    dsigmadt,
+    dgammadt,
+    L,
+    Ldot
+    ):
     Nb = np.size(body_x_coll)
     Nf = np.size(free_sheet_x)
 
@@ -277,10 +322,7 @@ def compute_pressure_distribution(tan_x,
     I_dsigmadt = np.zeros(Nb + 1)
     I_sigma = np.zeros(Nb + 1)
 
-    '''
-        Reconstruct the integral at the chebyshev nodes using collocation data
-    '''
-
+    # Reconstruct the integral at the chebyshev nodes using collocation data
     for l in prange(Nb):
         for k in range(Nb + 1):
             Ix,Iy = K_delta(body_x_coll[l] - body_x_cheb[k],
@@ -288,15 +330,6 @@ def compute_pressure_distribution(tan_x,
                             0
                             )
             if(k == 0 or k == Nb):
-                '''
-                    Check that this is proper, but I think it's fine.
-                    We need to scale by L in the bound sheet integral,
-                    go through the reconstruction to make sure it's good but I
-                    believe that since this reconstruction process will reconstruct
-                    the black box function it is fine to scale by dsdalpha here
-                    instead of in the final integral; actually I think this is probably
-                    the desirable place to do so.
-                '''
                 I_coll_x[l] = I_coll_x[l] + (np.pi/(2*Nb)) * sigma[k] * L * Ix
                 I_coll_y[l] = I_coll_y[l] + (np.pi/(2*Nb)) * sigma[k] * L * Iy
             else:
@@ -313,10 +346,7 @@ def compute_pressure_distribution(tan_x,
             I_cheb_x[k] = I_cheb_x[k] + (X_x[j]/Nb) * np.cos(j*k*np.pi/Nb)
             I_cheb_y[k] = I_cheb_y[k] + (X_y[j]/Nb) * np.cos(j*k*np.pi/Nb)
     
-    '''
-        Compute the integral over the free sheet
-    '''
-
+    # Compute the integral over the free sheet
     for k in prange(Nb + 1):
         for j in range(Nf-1):
             ux1,uy1 = K_delta(body_x_cheb[k] - free_sheet_x[j+1],
@@ -355,14 +385,15 @@ def compute_pressure_distribution(tan_x,
     return(p)
 
 @njit(parallel=True)
-def compute_forces(nhat_x,
-                   nhat_y,
-                   tan_x,
-                   tan_y,
-                   leading_edge_sigmas,
-                   pressures,
-                   L
-                   ):
+def compute_forces(
+    nhat_x,
+    nhat_y,
+    tan_x,
+    tan_y,
+    leading_edge_sigmas,
+    pressures,
+    L
+    ):
     Nb = np.size(pressures[:,0]) - 1
     Nt = np.size(pressures[0,:])
 
@@ -371,8 +402,10 @@ def compute_forces(nhat_x,
 
     for t in prange(Nt):
         for k in range(1, Nb-1):
-            Fx[t] = Fx[t] - nhat_x[t] * L[t] * (np.pi / Nb) * pressures[k,t] * np.sin(np.pi * k / Nb)
-            Fy[t] = Fy[t] - nhat_y[t] * L[t] * (np.pi / Nb) * pressures[k,t] * np.sin(np.pi * k / Nb)
+            Fx[t] = Fx[t] - nhat_x[t] * L[t] * (
+                np.pi / Nb) * pressures[k,t] * np.sin(np.pi * k / Nb)
+            Fy[t] = Fy[t] - nhat_y[t] * L[t] * (
+                np.pi / Nb) * pressures[k,t] * np.sin(np.pi * k / Nb)
 
         suction_x = tan_x[t] * (np.pi / 8) * (leading_edge_sigmas[t])**2
         suction_y = tan_y[t] * (np.pi / 8) * (leading_edge_sigmas[t])**2
@@ -383,13 +416,14 @@ def compute_forces(nhat_x,
     return Fx,Fy
 
 @njit(parallel=True)
-def compute_power_in(nhat_x,
-                     nhat_y,
-                     body_dxdt,
-                     body_dydt,
-                     pressures,
-                     L
-                  ):
+def compute_power_in(
+    nhat_x,
+    nhat_y,
+    body_dxdt,
+    body_dydt,
+    pressures,
+    L
+    ):
     Nb = np.size(pressures[:,0]) - 1
     Nt = np.size(pressures[0,:])
 
@@ -397,12 +431,11 @@ def compute_power_in(nhat_x,
 
     for t in prange(Nt):
         for k in range(1, Nb-1):
-            P[t] = P[t] - pressures[k,t] * (
+            P[t] = P[t] + pressures[k,t] * (
                 body_dxdt[k,t] * nhat_x[t] + body_dydt[k,t] * nhat_y[t]
             ) * L[t] * (np.pi / Nb) * np.sin(k * np.pi / Nb)
     
-    # not sure why P has the convention that it is negative? returning -P just flips the integral sign...
-    return -P
+    return P
 
 @njit
 def compute_time_average(time, quantity):
@@ -410,15 +443,14 @@ def compute_time_average(time, quantity):
     time_avg = 0
 
     for i in range(Nt-1):
-        time_avg = time_avg + 0.5 * (quantity[i+1] + quantity[i]) * (time[i+1] - time[i])
+        time_avg = time_avg + 0.5 * (
+            quantity[i+1] + quantity[i]) * (time[i+1] - time[i])
     
     time_avg = time_avg / (time[Nt-1] - time[0])
     
     return(time_avg)
 
-'''
-    matplotlib helper functions
-'''
+# --- Matplotlib Helper Functions ---
 
 def animate_motion(x, y, x_sheet, y_sheet, t, anim_name):
     fig, ax = plt.subplots()
@@ -480,48 +512,6 @@ def plot_time_dependent_quantity(time, quantity, ylabel):
     ax.set_ylabel(ylabel)
     plt.show()
 
-def plot_polar(angle, radius, quantity, label):
-    # 1. Generate sample data (theta in radians, r as radius)
-    # 2. Create figure and polar axis
-
-    theta_grid, r_grid = np.meshgrid(angle, radius)
-
-    fig, ax = plt.subplots(subplot_kw={'projection': 'polar'})
-
-    pcm = ax.contourf(theta_grid, r_grid, quantity, label, levels=50, cmap="viridis")
-
-    cbar = fig.colorbar(pcm, ax=ax, pad=0.1)
-    cbar.set_label(label)
-
-    ax.set_rlim(radius.min(), radius.max())
-    ax.set_thetalim(angle.min(), angle.max())
-
-    ax.set_title(label, va="bottom")
-    ax.grid(True)
-
-    plt.show()
-
-def plot_polar_rawdata(angle, radius, quantity, label):
-    # 1. Generate sample data (theta in radians, r as radius)
-    # 2. Create figure and polar axis
-
-    theta_grid, r_grid = np.meshgrid(angle, radius)
-
-    fig, ax = plt.subplots(subplot_kw={'projection': 'polar'})
-
-    pcm = ax.pcolormesh(theta_grid, r_grid, quantity, shading="nearest", cmap="viridis")
-
-    cbar = fig.colorbar(pcm, ax=ax, pad=0.1)
-    cbar.set_label(label)
-
-    ax.set_rlim(radius.min(), radius.max())
-    ax.set_thetalim(angle.min(), angle.max())
-
-    ax.set_title(label, va="bottom")
-    ax.grid(True)
-
-    plt.show()
-
 def write_report(data, data_labels, filename):
 
     with open(filename, mode="a", newline="") as f:
@@ -538,5 +528,3 @@ def write_report(data, data_labels, filename):
             row = list(np.asarray(data).ravel())
 
         writer.writerow(row)
-    
-    return(0)

@@ -1,29 +1,36 @@
 '''
 classes.py
 
-This file contains the class definitions for the free and bound sheets.
+This file contains the class definitions for the free and bound sheets. The
+classes introduced here are:
+    - BoundSheet: contains the body positions and velocities at all times, as 
+    well as allocated storage for simulation data (pressures, forces, etc).
+    - FreeSheet: contains the free sheet positions and circulations, growing
+    with each timestep by the append_circulation() function.
 
 Dependencies: numpy
 '''
+
 import params
 
 import numpy as np
 
 class BoundSheet:
-    def __init__(self, 
-                 heaving_amp, 
-                 heaving_phase, 
-                 pitching_amp, 
-                 pitching_phase, 
-                 length_amp, 
-                 length_phase, 
-                 pivot_loc, 
-                 frequency
-                 ):
+    def __init__(
+        self, 
+        heaving_amp, 
+        heaving_phase, 
+        pitching_amp, 
+        pitching_phase, 
+        length_amp, 
+        length_phase, 
+        pivot_loc, 
+        frequency
+        ):
         self.alpha_chebyshev = np.zeros(params.Nb+1)
         self.alpha_collocation = np.zeros(params.Nb)
         for k in range(params.Nb+1):
-            self.alpha_chebyshev[k] = -np.cos(k*np.pi/params.Nb)
+            self.alpha_chebyshev[k] = -np.cos(k*np.pi / params.Nb)
         for l in range(params.Nb):
             self.alpha_collocation[l] = -np.cos((2*l+1)*np.pi / (2*params.Nb))
 
@@ -51,34 +58,71 @@ class BoundSheet:
         self.tangent_y = np.zeros(params.Nt)
 
         self.L = np.zeros(params.Nt)
-        c = np.zeros(params.Nt)
+        h = np.zeros(params.Nt)
         theta = np.zeros(params.Nt)
 
         self.dLdt = np.zeros(params.Nt)
-        dcdt = np.zeros(params.Nt)
+        dhdt = np.zeros(params.Nt)
         dthetadt = np.zeros(params.Nt)
 
         for t in range(params.Nt):
-            freq_multiplier = 2
-            self.L[t] = 1 + 0.5 * length_amp * np.sin(freq_multiplier * 2 * np.pi * frequency * t * params.dt + length_phase)
-            c[t] = heaving_amp * np.sin(2 * np.pi * frequency * t * params.dt + heaving_phase)
-            theta[t] = pitching_amp * np.sin(2 * np.pi * frequency * t * params.dt + pitching_phase)
+            self.L[t] = 1 + 0.5 * length_amp * np.sin(
+                params.freq_multiplier * 2 * np.pi * frequency * t * params.dt 
+                + length_phase
+            )
+            h[t] = heaving_amp * np.sin(
+                2 * np.pi * frequency * t * params.dt + heaving_phase
+            )
+            theta[t] = pitching_amp * np.sin(
+                2 * np.pi * frequency * t * params.dt + pitching_phase
+            )
 
-            self.dLdt[t] = 0.5 * length_amp * freq_multiplier * 2 * np.pi * frequency * np.cos(freq_multiplier * 2 * np.pi * frequency * params.dt * t + length_phase)
-            dcdt[t] = heaving_amp * 2 * np.pi * frequency * np.cos(2 * np.pi * frequency * t * params.dt + heaving_phase)
-            dthetadt[t] = pitching_amp * 2 * np.pi * frequency * np.cos(2 * np.pi * frequency * t * params.dt + pitching_phase)
+            self.dLdt[t] = 0.5 * length_amp * 2 * np.pi * (
+                (params.freq_multiplier * frequency) * np.cos(
+                params.freq_multiplier * 2 * np.pi * frequency * params.dt * t 
+                + length_phase
+                )
+            )
+            dhdt[t] = heaving_amp * 2 * np.pi * frequency * np.cos(
+                2 * np.pi * frequency * t * params.dt + heaving_phase
+            )
+            dthetadt[t] = pitching_amp * 2 * np.pi * frequency * np.cos(
+                2 * np.pi * frequency * t * params.dt + pitching_phase
+            )
 
         for t in range(params.Nt):
             for k in range(params.Nb+1):
-                self.x_chebyshev[k, t] = self.L[t] * (self.alpha_chebyshev[k] - pivot_loc) * np.cos(theta[t]) + params.dt * t * params.u
-                self.y_chebyshev[k, t] = c[t] + self.L[t] * (self.alpha_chebyshev[k] - pivot_loc) * np.sin(theta[t])
-                self.dxdt_chebyshev[k, t] = self.dLdt[t] * (self.alpha_chebyshev[k] - pivot_loc) * np.cos(theta[t]) + self.L[t] * (self.alpha_chebyshev[k] - pivot_loc) * -np.sin(theta[t]) * dthetadt[t] + params.u
-                self.dydt_chebyshev[k, t] = dcdt[t] + self.dLdt[t] * (self.alpha_chebyshev[k] - pivot_loc) * np.sin(theta[t]) + self.L[t] * (self.alpha_chebyshev[k] - pivot_loc) *np.cos(theta[t]) * dthetadt[t]
+                self.x_chebyshev[k, t] = self.L[t] * (
+                    self.alpha_chebyshev[k] - pivot_loc) * np.cos(
+                    theta[t]) + params.dt * t * params.u
+                self.y_chebyshev[k, t] = h[t] + self.L[t] * (
+                    self.alpha_chebyshev[k] - pivot_loc) * np.sin(theta[t])
+                self.dxdt_chebyshev[k, t] = self.dLdt[t] * (
+                    self.alpha_chebyshev[k] - pivot_loc
+                    ) * np.cos(theta[t]) + self.L[t] * (
+                    self.alpha_chebyshev[k] - pivot_loc
+                    ) * -np.sin(theta[t]) * dthetadt[t] + params.u
+                self.dydt_chebyshev[k, t] = dhdt[t] + self.dLdt[t] * (
+                    self.alpha_chebyshev[k] - pivot_loc) * np.sin(
+                    theta[t]) + self.L[t] * (
+                    self.alpha_chebyshev[k] - pivot_loc) * np.cos(
+                    theta[t]) * dthetadt[t]
             for l in range(params.Nb):
-                self.x_collocation[l, t] = self.L[t] * (self.alpha_collocation[l] - pivot_loc) * np.cos(theta[t]) + params.dt * t * params.u
-                self.y_collocation[l, t] = c[t] + self.L[t] * (self.alpha_collocation[l] - pivot_loc) * np.sin(theta[t])
-                self.dxdt_collocation[l, t] = self.dLdt[t] * (self.alpha_collocation[l] - pivot_loc) * np.cos(theta[t]) + self.L[t] * (self.alpha_collocation[l] - pivot_loc) * -np.sin(theta[t]) * dthetadt[t] + params.u
-                self.dydt_collocation[l, t] = dcdt[t] + self.dLdt[t] * (self.alpha_collocation[l] - pivot_loc) * np.sin(theta[t]) + self.L[t] * (self.alpha_collocation[l] - pivot_loc) *np.cos(theta[t]) * dthetadt[t]
+                self.x_collocation[l, t] = self.L[t] * (
+                    self.alpha_collocation[l] - pivot_loc
+                    ) * np.cos(theta[t]) + params.dt * t * params.u
+                self.y_collocation[l, t] = h[t] + self.L[t] * (
+                    self.alpha_collocation[l] - pivot_loc) * np.sin(theta[t])
+                self.dxdt_collocation[l, t] = self.dLdt[t] * (
+                    self.alpha_collocation[l] - pivot_loc) * np.cos(
+                    theta[t]) + self.L[t] * (
+                    self.alpha_collocation[l] - pivot_loc) * -np.sin(
+                    theta[t]) * dthetadt[t] + params.u
+                self.dydt_collocation[l, t] = dhdt[t] + self.dLdt[t] * (
+                    self.alpha_collocation[l] - pivot_loc) * np.sin(
+                    theta[t]) + self.L[t] * (
+                    self.alpha_collocation[l] - pivot_loc) * np.cos(
+                    theta[t]) * dthetadt[t]
 
         self.normal_x = -np.sin(theta)
         self.normal_y = np.cos(theta)
@@ -94,11 +138,13 @@ class FreeSheet:
         self.dxdt = np.zeros(0)
         self.dydt = np.zeros(0)
         self.dgammadt = 0
-    def append_circulation(self,
-                           circulation_new,
-                           x_new,
-                           y_new,
-                           ):
+
+    def append_circulation(
+        self,
+        circulation_new,
+        x_new,
+        y_new,
+        ):
         self.circulation = np.append(self.circulation, circulation_new)
         self.x = np.append(self.x, x_new)
         self.y = np.append(self.y, y_new)
